@@ -1,0 +1,40 @@
+# Unity generated folders
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Mm]emoryCaptures/
+UserSettings/
+
+# Visual Studio / VS Code
+.vs/
+.vscode/
+*.code-workspace
+
+# Auto-generated files
+*.csproj
+*.unityproj
+*.sln
+*.suo
+*.tmp
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+
+# Crash reports
+sysinfo.txt
+
+# Android / iOS
+*.apk
+*.aab
+*.ipa
+*.jks
+*.keystore
+
+# Other
+.DS_Store
+Thumbs.db
