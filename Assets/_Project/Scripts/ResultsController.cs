@@ -1,25 +1,762 @@
+using System;
 using UnityEngine;
+using UnityEngine.Events;
+using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
+using UnityEngine.UI;
+using TMPro;
 
 public class ResultsController : MonoBehaviour
 {
-    [SerializeField] private string gameSceneName = "Game";
-    [SerializeField] private string menuSceneName = "MenuHub";
+    private const string RestartButtonName = "RestartButton";
+    private const string MenuButtonName = "MenuButton";
+    private const string ContinueButtonName = "ContinueButton";
+    private const string FinalScoreLabelName = "FinalScoreText";
+    private const string BestScoreLabelName = "BestScoreText";
+    private const string GameOverTitleName = "GameOverTitle";
+    private const string BestScoreKey = "BEST_SCORE";
+
+    [Header("UI Auto-Build Settings")]
+    [SerializeField] private Vector2 referenceResolution = new Vector2(1080f, 1920f);
+
+    [Header("UI References (Optional)")]
+    [SerializeField] private Button continueButton;
+    [SerializeField] private Button restartButton;
+    [SerializeField] private Button menuButton;
+    [SerializeField] private TextMeshProUGUI finalScoreText;
+    [SerializeField] private TextMeshProUGUI bestScoreText;
+    [SerializeField] private TextMeshProUGUI gameOverTitle;
+
+    [Header("Testing (Optional)")]
+    [SerializeField, Tooltip("Force show Continue button for UI testing only.")]
+    private bool forceShowContinueForTesting = false;
+
+    private bool uiInitialized;
+    private bool buttonsBound;
+    private bool continueButtonBound;
+
+    private Canvas cachedCanvas;
+    private bool continueRequestInProgress;
+    private bool continueAvailable;
+
+    private bool missingFinalScoreLabelLogged;
+    private bool missingBestScoreLabelLogged;
 
     private void Awake()
     {
         Time.timeScale = 1f;
+        EnsureUserInterface();
+        BindButtons();
     }
 
-    public void Restart()
+    private void OnEnable()
     {
         Time.timeScale = 1f;
-        SceneManager.LoadScene(gameSceneName);
+        BindButtons();
+        RefreshContinueState();
     }
 
-    public void Menu()
+    private void OnDisable()
+    {
+        UnbindButtons();
+    }
+
+    private void Start()
     {
         Time.timeScale = 1f;
-        SceneManager.LoadScene(menuSceneName);
+        UpdateScoreLabels();
+        RefreshContinueState();
+        LogUiDiagnostics();
+    }
+
+    public void RestartGame()
+    {
+        Time.timeScale = 1f;
+        SceneManager.LoadScene(SceneNames.Game);
+    }
+
+    public void GoToMenu()
+    {
+        Time.timeScale = 1f;
+        SceneManager.LoadScene(SceneNames.MenuHub);
+    }
+
+    // =========================
+    // Continue (NO ADS)
+    // =========================
+    private void OnContinuePressed()
+    {
+        Debug.Log("[CONTINUE] Clicked", this);
+
+        if (continueRequestInProgress)
+        {
+            Debug.Log("[CONTINUE] Already processing", this);
+            return;
+        }
+
+        continueRequestInProgress = true;
+        if (continueButton) continueButton.interactable = false;
+
+        if (!continueAvailable)
+        {
+            Debug.LogWarning("[CONTINUE] Not available", this);
+            continueRequestInProgress = false;
+            RefreshContinueState();
+            return;
+        }
+
+        bool ok = false;
+        try
+        {
+            ok = GameController.ContinueRun();
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError($"[CONTINUE] Exception in ContinueRun(): {ex}", this);
+            ok = false;
+        }
+
+        Debug.Log($"[CONTINUE] ContinueRun() => {ok}", this);
+
+        // ✅ منع ظهور الكونتينيو مرة ثانية بنفس الجولة بعد نجاحه
+        if (ok)
+        {
+            continueAvailable = false;
+        }
+
+        continueRequestInProgress = false;
+        RefreshContinueState();
+    }
+
+    // =========================
+    // UI Setup
+    // =========================
+    private void EnsureUserInterface()
+    {
+        if (uiInitialized) return;
+
+        Canvas canvas = ResolveCanvasReference();
+
+        if (!canvas)
+        {
+            canvas = CreateCanvasWithButtons();
+        }
+        else
+        {
+            ConfigureCanvas(canvas);
+            ConfigureCanvasScaler(canvas.GetComponent<CanvasScaler>());
+            EnsureGraphicRaycaster(canvas);
+            DisableCanvasBackgroundRaycast(canvas);
+            AttemptButtonLookup(canvas.transform);
+            AttemptScoreLabelLookup(canvas.transform);
+            ConfigureButtonLayout();
+        }
+
+        if (!canvas)
+        {
+            Debug.LogError("ResultsController: Failed to create or resolve a Canvas instance.");
+            return;
+        }
+
+        cachedCanvas = canvas;
+        DisableAllTextRaycasts(canvas.transform);
+        EnsureEventSystem();
+        CleanupDuplicateGameOverTitles(canvas.transform);
+        CleanupExternalGameOverTitles();
+
+        uiInitialized = true;
+    }
+
+    private Canvas ResolveCanvasReference()
+    {
+        if (restartButton) return restartButton.GetComponentInParent<Canvas>();
+        if (menuButton) return menuButton.GetComponentInParent<Canvas>();
+        return GetComponentInChildren<Canvas>();
+    }
+
+    private Canvas CreateCanvasWithButtons()
+    {
+        var canvasGO = new GameObject("ResultsCanvas", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+        canvasGO.transform.SetParent(transform, false);
+
+        var canvas = canvasGO.GetComponent<Canvas>();
+        ConfigureCanvas(canvas);
+
+        var scaler = canvasGO.GetComponent<CanvasScaler>();
+        ConfigureCanvasScaler(scaler);
+        EnsureGraphicRaycaster(canvas);
+        DisableCanvasBackgroundRaycast(canvas);
+
+        var contentRoot = CreateContentRoot(canvas.transform);
+
+        gameOverTitle = CreateGameOverTitle(contentRoot);
+
+        var scorePanel = CreateScorePanel(contentRoot);
+        finalScoreText = CreateLabel(scorePanel, FinalScoreLabelName, Vector2.zero, 60f, "Score: 0", true);
+        bestScoreText = CreateLabel(scorePanel, BestScoreLabelName, Vector2.zero, 50f, "Best: 0", true);
+
+        var buttonsRoot = CreateButtonPanel(contentRoot);
+        continueButton = CreateButton(buttonsRoot, ContinueButtonName, "Continue");
+        restartButton = CreateButton(buttonsRoot, RestartButtonName, "Restart");
+        menuButton = CreateButton(buttonsRoot, MenuButtonName, "Menu");
+
+        return canvas;
+    }
+
+    private void ConfigureCanvas(Canvas canvas)
+    {
+        if (!canvas) return;
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.pixelPerfect = false;
+        canvas.sortingOrder = 0;
+    }
+
+    private void ConfigureCanvasScaler(CanvasScaler scaler)
+    {
+        if (!scaler) return;
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = referenceResolution;
+        scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
+        scaler.matchWidthOrHeight = 0.5f;
+    }
+
+    private void EnsureGraphicRaycaster(Canvas canvas)
+    {
+        if (!canvas) return;
+        if (!canvas.TryGetComponent<GraphicRaycaster>(out _))
+            canvas.gameObject.AddComponent<GraphicRaycaster>();
+    }
+
+    private void DisableCanvasBackgroundRaycast(Canvas canvas)
+    {
+        if (!canvas) return;
+        if (canvas.TryGetComponent<Image>(out var image))
+            image.raycastTarget = false;
+    }
+
+    private void DisableAllTextRaycasts(Transform root)
+    {
+        if (!root) return;
+        var labels = root.GetComponentsInChildren<TextMeshProUGUI>(true);
+        foreach (var label in labels)
+            label.raycastTarget = false;
+    }
+
+    private void EnsureEventSystem()
+    {
+        if (FindObjectOfType<EventSystem>() != null) return;
+        new GameObject("EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
+    }
+
+    // =========================
+    // Binding
+    // =========================
+    private void BindButtons()
+    {
+        if (buttonsBound) return;
+
+        var restartBound = BindButton(restartButton, RestartGame, nameof(RestartGame));
+        var menuBound = BindButton(menuButton, GoToMenu, nameof(GoToMenu));
+        BindContinueButton();
+
+        buttonsBound = restartBound && menuBound;
+    }
+
+    private void BindContinueButton()
+    {
+        if (!continueButton)
+        {
+            continueButtonBound = false;
+            return;
+        }
+
+        continueButton.onClick.RemoveAllListeners();
+        continueButton.onClick.AddListener(OnContinuePressed);
+        continueButtonBound = true;
+    }
+
+    private bool BindButton(Button button, UnityAction action, string methodName, bool required = true)
+    {
+        if (!button)
+        {
+            if (required)
+            {
+                Debug.LogError($"ResultsController: Missing button for {methodName}.", this);
+                return false;
+            }
+            return true;
+        }
+
+        button.onClick.RemoveListener(action);
+        button.onClick.AddListener(action);
+        return true;
+    }
+
+    private void UnbindButtons()
+    {
+        if (!buttonsBound) return;
+
+        restartButton?.onClick.RemoveListener(RestartGame);
+        menuButton?.onClick.RemoveListener(GoToMenu);
+
+        if (continueButton && continueButtonBound)
+            continueButton.onClick.RemoveAllListeners();
+
+        buttonsBound = false;
+        continueButtonBound = false;
+    }
+
+    // =========================
+    // Lookup / Layout
+    // =========================
+    private void AttemptButtonLookup(Transform canvasTransform)
+    {
+        if (!canvasTransform) return;
+
+        if (!continueButton) continueButton = FindButton(canvasTransform, ContinueButtonName);
+        if (!restartButton) restartButton = FindButton(canvasTransform, RestartButtonName);
+        if (!menuButton) menuButton = FindButton(canvasTransform, MenuButtonName);
+
+        AttemptScoreLabelLookup(canvasTransform);
+        ConfigureButtonLayout();
+    }
+
+    private Button FindButton(Transform parent, string buttonName)
+    {
+        var target = parent.Find(buttonName);
+        return target ? target.GetComponent<Button>() : null;
+    }
+
+    private Button CreateButton(Transform parent, string name, string label)
+    {
+        var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
+        go.transform.SetParent(parent, false);
+
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+        rt.sizeDelta = new Vector2(360f, 90f);
+
+        var img = go.GetComponent<Image>();
+        img.color = Color.white;
+        img.raycastTarget = true;
+
+        var layout = go.AddComponent<LayoutElement>();
+        layout.preferredWidth = 360f;
+        layout.preferredHeight = 90f;
+        layout.minHeight = 90f;
+        layout.flexibleWidth = 1f;
+
+        var btn = go.GetComponent<Button>();
+        CreateButtonLabel(go.transform, label, 36f);
+        return btn;
+    }
+
+    private void CreateButtonLabel(Transform parent, string textValue, float fontSize)
+    {
+        var labelGO = new GameObject("Label");
+        labelGO.transform.SetParent(parent, false);
+
+        var tmp = labelGO.AddComponent<TextMeshProUGUI>();
+        tmp.text = textValue;
+        tmp.alignment = TextAlignmentOptions.Center;
+        tmp.fontSize = fontSize;
+        tmp.color = Color.black;
+        tmp.raycastTarget = false;
+
+        var rect = tmp.GetComponent<RectTransform>();
+        rect.anchorMin = Vector2.zero;
+        rect.anchorMax = Vector2.one;
+        rect.offsetMin = Vector2.zero;
+        rect.offsetMax = Vector2.zero;
+    }
+
+    private TextMeshProUGUI CreateLabel(Transform parent, string labelName, Vector2 anchoredPos, float fontSize, string defaultText, bool addOutline)
+    {
+        var go = new GameObject(labelName, typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
+        go.transform.SetParent(parent, false);
+
+        var tmp = go.GetComponent<TextMeshProUGUI>();
+        tmp.text = defaultText;
+        tmp.raycastTarget = false;
+
+        ApplyScoreLabelStyle(tmp, fontSize, addOutline);
+        ConfigureScoreLabel(tmp, anchoredPos);
+        return tmp;
+    }
+
+    private void ApplyScoreLabelStyle(TextMeshProUGUI label, float fontSize, bool addOutline)
+    {
+        if (!label) return;
+
+        label.fontSize = fontSize;
+        label.alignment = TextAlignmentOptions.Center;
+        label.color = Color.white;
+        label.enableWordWrapping = false;
+
+        if (addOutline)
+        {
+            label.outlineColor = Color.black;
+            label.outlineWidth = 0.25f;
+        }
+        else
+        {
+            label.outlineWidth = 0f;
+        }
+    }
+
+    private void ConfigureScoreLabel(TextMeshProUGUI label, Vector2 anchoredPos)
+    {
+        if (!label) return;
+
+        bool parentHasLayout = label.transform.parent && label.transform.parent.GetComponent<HorizontalOrVerticalLayoutGroup>();
+
+        var rect = label.rectTransform;
+        rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
+
+        if (parentHasLayout)
+        {
+            rect.sizeDelta = new Vector2(0f, 120f);
+
+            var layout = label.GetComponent<LayoutElement>();
+            if (!layout)
+                layout = label.gameObject.AddComponent<LayoutElement>();
+
+            layout.minHeight = 110f;
+            layout.preferredHeight = 120f;
+        }
+        else
+        {
+            rect.sizeDelta = new Vector2(820f, 140f);
+            rect.anchoredPosition = anchoredPos;
+        }
+    }
+
+    private RectTransform CreateContentRoot(Transform parent)
+    {
+        var rootGO = new GameObject("ResultsContent", typeof(RectTransform));
+        rootGO.transform.SetParent(parent, false);
+
+        var rect = rootGO.GetComponent<RectTransform>();
+        rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
+        rect.pivot = new Vector2(0.5f, 0.5f);
+        rect.sizeDelta = new Vector2(900f, 1400f);
+
+        var layout = rootGO.AddComponent<VerticalLayoutGroup>();
+        layout.spacing = 40f;
+        layout.padding = new RectOffset(0, 0, 140, 80);
+        layout.childAlignment = TextAnchor.UpperCenter;
+        layout.childControlWidth = true;
+        layout.childControlHeight = false;
+        layout.childForceExpandWidth = true;
+        layout.childForceExpandHeight = false;
+
+        var fitter = rootGO.AddComponent<ContentSizeFitter>();
+        fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+        return rect;
+    }
+
+    private RectTransform CreateScorePanel(Transform parent)
+    {
+        var panelGO = new GameObject("ScorePanel", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        panelGO.transform.SetParent(parent, false);
+
+        var rect = panelGO.GetComponent<RectTransform>();
+        rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
+        rect.pivot = new Vector2(0.5f, 0.5f);
+        rect.sizeDelta = new Vector2(820f, 260f);
+
+        var bg = panelGO.GetComponent<Image>();
+        bg.color = new Color(1f, 1f, 1f, 0.06f);
+        bg.raycastTarget = false;
+
+        var layout = panelGO.AddComponent<VerticalLayoutGroup>();
+        layout.spacing = 32f;
+        layout.padding = new RectOffset(20, 20, 30, 30);
+        layout.childAlignment = TextAnchor.MiddleCenter;
+        layout.childControlWidth = true;
+        layout.childControlHeight = false;
+        layout.childForceExpandWidth = true;
+        layout.childForceExpandHeight = false;
+
+        var layoutElement = panelGO.AddComponent<LayoutElement>();
+        layoutElement.preferredWidth = 820f;
+        layoutElement.minHeight = 300f;
+
+        return rect;
+    }
+
+    private TextMeshProUGUI CreateGameOverTitle(Transform parent)
+    {
+        var go = new GameObject(GameOverTitleName, typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
+        go.transform.SetParent(parent, false);
+
+        var label = go.GetComponent<TextMeshProUGUI>();
+        label.text = "GAME OVER";
+        label.alignment = TextAlignmentOptions.Center;
+        label.fontSize = 120f;
+        label.color = Color.white;
+        label.raycastTarget = false;
+
+        ConfigureGameOverTitle(label);
+        return label;
+    }
+
+    private void ConfigureGameOverTitle(TextMeshProUGUI titleLabel)
+    {
+        if (!titleLabel) return;
+
+        titleLabel.enableWordWrapping = false;
+
+        bool parentHasLayout = titleLabel.transform.parent && titleLabel.transform.parent.GetComponent<HorizontalOrVerticalLayoutGroup>();
+        var rect = titleLabel.rectTransform;
+
+        if (parentHasLayout)
+        {
+            rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.sizeDelta = new Vector2(0f, 150f);
+
+            var layout = titleLabel.GetComponent<LayoutElement>();
+            if (!layout)
+                layout = titleLabel.gameObject.AddComponent<LayoutElement>();
+
+            layout.preferredHeight = 150f;
+            layout.minHeight = 140f;
+        }
+        else
+        {
+            rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 1f);
+            rect.pivot = new Vector2(0.5f, 1f);
+            rect.anchoredPosition = new Vector2(0f, -160f);
+            rect.sizeDelta = new Vector2(900f, 170f);
+        }
+    }
+
+    private RectTransform CreateButtonPanel(Transform parent)
+    {
+        var panelGO = new GameObject("ButtonPanel", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        panelGO.transform.SetParent(parent, false);
+
+        var rect = panelGO.GetComponent<RectTransform>();
+        rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
+        rect.pivot = new Vector2(0.5f, 0.5f);
+        rect.sizeDelta = new Vector2(420f, 360f);
+
+        var image = panelGO.GetComponent<Image>();
+        image.color = new Color(1f, 1f, 1f, 0.08f);
+        image.raycastTarget = false;
+
+        var layout = panelGO.AddComponent<VerticalLayoutGroup>();
+        layout.spacing = 28f;
+        layout.padding = new RectOffset(30, 30, 40, 40);
+        layout.childAlignment = TextAnchor.MiddleCenter;
+        layout.childControlWidth = false;
+        layout.childControlHeight = false;
+        layout.childForceExpandWidth = false;
+        layout.childForceExpandHeight = false;
+
+        var layoutElement = panelGO.AddComponent<LayoutElement>();
+        layoutElement.preferredWidth = 420f;
+        layoutElement.minHeight = 360f;
+
+        return rect;
+    }
+
+    private void ConfigureButtonLayout()
+    {
+        ApplyButtonStyle(continueButton);
+        ApplyButtonStyle(restartButton);
+        ApplyButtonStyle(menuButton);
+    }
+
+    private static void ApplyButtonStyle(Button button)
+    {
+        if (!button) return;
+
+        var rect = button.GetComponent<RectTransform>();
+        if (rect)
+        {
+            rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.sizeDelta = new Vector2(360f, 90f);
+        }
+
+        var label = button.GetComponentInChildren<TextMeshProUGUI>();
+        if (label)
+        {
+            label.fontSize = 36f;
+            label.color = Color.black;
+            label.alignment = TextAlignmentOptions.Center;
+            label.raycastTarget = false;
+        }
+
+        var image = button.GetComponent<Image>();
+        if (image)
+        {
+            image.color = Color.white;
+        }
+    }
+
+    // =========================
+    // Score + Continue State
+    // =========================
+    private void AttemptScoreLabelLookup(Transform canvasTransform)
+    {
+        if (!canvasTransform) return;
+
+        if (!finalScoreText)
+        {
+            finalScoreText = FindLabel(canvasTransform, FinalScoreLabelName);
+        }
+
+        if (!bestScoreText)
+        {
+            bestScoreText = FindLabel(canvasTransform, BestScoreLabelName);
+        }
+
+        if (!gameOverTitle)
+        {
+            var foundTitle = FindLabel(canvasTransform, GameOverTitleName);
+            if (foundTitle)
+            {
+                ConfigureGameOverTitle(foundTitle);
+                gameOverTitle = foundTitle;
+            }
+        }
+
+        if (finalScoreText)
+        {
+            ApplyScoreLabelStyle(finalScoreText, 60f, true);
+            ConfigureScoreLabel(finalScoreText, new Vector2(0f, -360f));
+        }
+
+        if (bestScoreText)
+        {
+            ApplyScoreLabelStyle(bestScoreText, 50f, true);
+            ConfigureScoreLabel(bestScoreText, new Vector2(0f, -440f));
+        }
+
+        CleanupDuplicateGameOverTitles(canvasTransform);
+        CleanupExternalGameOverTitles();
+    }
+
+    private void CleanupDuplicateGameOverTitles(Transform root)
+    {
+        if (!root) return;
+
+        var titles = root.GetComponentsInChildren<TextMeshProUGUI>(true);
+        foreach (var label in titles)
+        {
+            if (label == gameOverTitle) continue;
+
+            string text = label.text;
+            if (string.IsNullOrWhiteSpace(text)) continue;
+
+            if (!IsGameOverText(text))
+                continue;
+
+            if (!gameOverTitle)
+            {
+                gameOverTitle = label;
+                ConfigureGameOverTitle(gameOverTitle);
+                continue;
+            }
+
+            Destroy(label.gameObject);
+        }
+    }
+
+    private void CleanupExternalGameOverTitles()
+    {
+        var titles = FindObjectsOfType<TextMeshProUGUI>(true);
+        var allowedRoot = cachedCanvas ? cachedCanvas.transform : null;
+
+        foreach (var label in titles)
+        {
+            if (label == gameOverTitle) continue;
+            if (!IsGameOverText(label.text)) continue;
+
+            if (allowedRoot && label.transform.IsChildOf(allowedRoot))
+                continue;
+
+            Destroy(label.gameObject);
+        }
+    }
+
+    private bool IsGameOverText(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return false;
+
+        var normalized = string.Join(
+            " ",
+            text.Split(new[] { ' ', '\t', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
+        );
+
+        return string.Equals(normalized, "GAME OVER", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private TextMeshProUGUI FindLabel(Transform parent, string labelName)
+    {
+        var target = parent.Find(labelName);
+        return target ? target.GetComponent<TextMeshProUGUI>() : null;
+    }
+
+    private void UpdateScoreLabels()
+    {
+        int finalScore = 0;
+        int storedBest = PlayerPrefs.GetInt(BestScoreKey, 0);
+        int snapshotBest = storedBest;
+
+        if (ScoreSnapshot.HasValue)
+        {
+            finalScore = ScoreSnapshot.LastScore;
+            snapshotBest = ScoreSnapshot.LastBest;
+        }
+
+        int bestScore = Mathf.Max(storedBest, snapshotBest, finalScore);
+
+        // ✅ حفظ مضمون
+        if (bestScore != storedBest)
+        {
+            PlayerPrefs.SetInt(BestScoreKey, bestScore);
+            PlayerPrefs.Save();
+        }
+
+        if (finalScoreText)
+            finalScoreText.text = $"Score: {finalScore}";
+        else if (!missingFinalScoreLabelLogged)
+        {
+            Debug.LogError("ResultsController: FinalScoreText missing.", this);
+            missingFinalScoreLabelLogged = true;
+        }
+
+        if (bestScoreText)
+            bestScoreText.text = $"Best: {bestScore}";
+        else if (!missingBestScoreLabelLogged)
+        {
+            Debug.LogError("ResultsController: BestScoreText missing.", this);
+            missingBestScoreLabelLogged = true;
+        }
+    }
+
+    private void RefreshContinueState()
+    {
+        // ✅ يعتمد على منطقك الحالي: مرة وحدة لكل Run
+        continueAvailable = forceShowContinueForTesting || ScoreSnapshot.CanContinue;
+
+        if (!continueButton)
+            return;
+
+        continueButton.gameObject.SetActive(continueAvailable);
+        continueButton.interactable = continueAvailable && !continueRequestInProgress;
+    }
+
+    private void LogUiDiagnostics()
+    {
+        var canvas = cachedCanvas ? cachedCanvas : ResolveCanvasReference();
+        bool hasEventSystem = FindObjectOfType<EventSystem>() != null;
+        bool hasRaycaster = canvas && canvas.GetComponent<GraphicRaycaster>() != null;
+
+        Debug.Log($"[RESULTS] EventSystem={hasEventSystem} Raycaster={hasRaycaster}", this);
     }
 }

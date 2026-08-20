@@ -237,6 +237,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 549124604}
+  - component: {fileID: 549124605}
   m_Layer: 0
   m_Name: Spawner
   m_TagString: Untagged
@@ -253,12 +254,29 @@ Transform:
   m_GameObject: {fileID: 549124603}
   serializedVersion: 2
   m_LocalRotation: {x: 0.0030427354, y: 0.04351315, z: 0.06969008, w: 0.99661463}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalPosition: {x: 0, y: 0, z: -6}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 5, z: 8}
+--- !u!114 &549124605
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 549124603}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 598b52cddd565385c893e66c938ba4c6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  obstaclePrefab: {fileID: 2831478935618217927, guid: ef6b039ace42499689641e0508ec145b, type: 3}
+  spawnInterval: 1.5
+  spawnRangeX: 4
+  spawnHeight: 10
+  ensureKillOnHit: 1
 --- !u!1 &751755595
 GameObject:
   m_ObjectHideFlags: 0
@@ -364,10 +382,10 @@ GameObject:
   - component: {fileID: 1097900769}
   - component: {fileID: 1097900768}
   - component: {fileID: 1097900767}
-  - component: {fileID: 1097900772}
+  - component: {fileID: 1097900773}
   m_Layer: 0
   m_Name: player
-  m_TagString: Untagged
+  m_TagString: Player
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -472,18 +490,33 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1097900772
-MonoBehaviour:
+--- !u!54 &1097900773
+Rigidbody:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1097900766}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a41b30ac4ad8f16adba110061d36cfa6, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  serializedVersion: 4
+  m_Mass: 1
+  m_Drag: 0
+  m_AngularDrag: 0.05
+  m_CenterOfMass: {x: 0, y: 0, z: 0}
+  m_InertiaTensor: {x: 1, y: 1, z: 1}
+  m_InertiaRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ImplicitCom: 1
+  m_ImplicitTensor: 1
+  m_UseGravity: 0
+  m_IsKinematic: 0
+  m_Interpolate: 0
+  m_Constraints: 124
+  m_CollisionDetection: 0
 --- !u!1 &1283242196
 GameObject:
   m_ObjectHideFlags: 0
@@ -608,10 +641,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   scorePerSecond: 1
+  uiUpdateInterval: 0.1
   difficultyEverySeconds: 8
   spawnIntervalMultiplier: 0.9
   minSpawnInterval: 0.5
-  obstacleSpawner: {fileID: 0}
+  obstacleSpawner: {fileID: 549124605}
 --- !u!4 &2067901628
 Transform:
   m_ObjectHideFlags: 0
