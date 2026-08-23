@@ -117,7 +117,7 @@ public class ObstacleSpawner : MonoBehaviour
 
     private bool TrySpawnObstacle(float speed)
     {
-        if (!TrySelectLane(out int laneIndex))
+        if (!TrySelectLane(speed, out int laneIndex))
         {
             return false;
         }
@@ -157,7 +157,7 @@ public class ObstacleSpawner : MonoBehaviour
         mover.SetSpeed(speed);
     }
 
-    private bool TrySelectLane(out int laneIndex)
+    private bool TrySelectLane(float spawnSpeed, out int laneIndex)
     {
         EnsureLaneArrays();
 
@@ -189,15 +189,15 @@ public class ObstacleSpawner : MonoBehaviour
 
             if (enableFairnessRules && laneCount >= 3)
             {
-                if (WouldExhaustSafeLanes(candidate))
+                if (ViolatesReactionTime(candidate, now, spawnSpeed))
                 {
-                    DebugLane($"reject lane {candidate} (all lanes would block)");
+                    DebugLane($"reject lane {candidate} (reaction)");
                     continue;
                 }
 
-                if (ViolatesReactionTime(candidate, now))
+                if (WouldExhaustSafeLanes(candidate, spawnSpeed))
                 {
-                    DebugLane($"reject lane {candidate} (reaction)");
+                    DebugLane($"reject lane {candidate} (all lanes would block)");
                     continue;
                 }
 
@@ -346,30 +346,73 @@ public class ObstacleSpawner : MonoBehaviour
         autoDestroy.SetLifetime(autoDestroyLifetime);
     }
 
-    private bool ViolatesReactionTime(int candidate, float now)
+    private bool ViolatesReactionTime(int candidate, float now, float spawnSpeed)
     {
         if (reactionTimeSeconds <= 0f || lastLaneIndex < 0 || candidate == lastLaneIndex)
         {
             return false;
         }
 
-        return (now - lastSpawnGlobalTime) < reactionTimeSeconds;
+        if ((now - lastSpawnGlobalTime) >= reactionTimeSeconds)
+        {
+            return false;
+        }
+
+        // Do not suppress lane switches when previous hazards are still far from the player.
+        if (!IsLaneBlocked(lastLaneIndex))
+        {
+            return false;
+        }
+
+        // Only gate lane switches when the new spawn will become dangerous soon.
+        if (!WouldSpawnThreatenSoon(spawnSpeed))
+        {
+            return false;
+        }
+
+        // Keep trap protection in the short reaction window.
+        return WouldExhaustSafeLanes(candidate, spawnSpeed);
     }
 
-    private bool WouldExhaustSafeLanes(int candidate)
+    private bool WouldExhaustSafeLanes(int candidate, float spawnSpeed)
     {
         int count = lanePositions.Length;
         int blocked = 0;
+        bool candidateThreatensSoon = WouldSpawnThreatenSoon(spawnSpeed);
 
         for (int i = 0; i < count; i++)
         {
-            if (i == candidate || IsLaneBlocked(i))
+            bool laneBlocked = IsLaneBlocked(i);
+
+            // Candidate lane should only count as blocked if the newly spawned obstacle
+            // will enter the player's reaction zone soon.
+            if (i == candidate && candidateThreatensSoon)
+            {
+                laneBlocked = true;
+            }
+
+            if (laneBlocked)
             {
                 blocked++;
             }
         }
 
         return blocked >= count;
+    }
+
+    private bool WouldSpawnThreatenSoon(float spawnSpeed)
+    {
+        float speed = Mathf.Max(0.1f, spawnSpeed);
+        float playerY = playerReference ? playerReference.position.y : 0f;
+        float dangerTop = playerY + dangerRange;
+
+        if (spawnHeight <= dangerTop)
+        {
+            return true;
+        }
+
+        float timeToDanger = (spawnHeight - dangerTop) / speed;
+        return timeToDanger <= reactionTimeSeconds;
     }
 
     private bool ViolatesLockRule(int candidate, float now)
