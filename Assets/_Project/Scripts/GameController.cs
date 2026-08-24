@@ -106,7 +106,7 @@ public class GameController : MonoBehaviour
 
     private void Update()
     {
-        TickRecoveryTimers();
+        TickRuntimeTimers();
 
         if (_gameOver)
         {
