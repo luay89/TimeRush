@@ -4,6 +4,8 @@ using UnityEngine;
 
 public class ObstacleSpawner : MonoBehaviour
 {
+    private const int MaxLaneSelectionAge = 3;
+
     [SerializeField] private GameObject obstaclePrefab;
     [SerializeField] private float fallbackInterval = 1.5f;
     [SerializeField] private float fallbackSpeed = 6f;
@@ -33,6 +35,7 @@ public class ObstacleSpawner : MonoBehaviour
     private float[] lastLaneY;
     private float[] lastLaneSpeed;
     private float[] lastLaneTime;
+    private int[] laneSelectionAge;
     private int lastLaneIndex = -1;
     private int previousLaneIndex = -1;
     private int secondPreviousLaneIndex = -1;
@@ -162,12 +165,12 @@ public class ObstacleSpawner : MonoBehaviour
         EnsureLaneArrays();
 
         int laneCount = lanePositions.Length;
-        int start = Random.Range(0, laneCount);
         float now = Time.time;
+        var validLanes = new List<int>(laneCount);
 
         for (int i = 0; i < laneCount; i++)
         {
-            int candidate = (start + i) % laneCount;
+            int candidate = i;
 
             if (preventSameLaneTwice && candidate == lastLaneIndex)
             {
@@ -208,14 +211,31 @@ public class ObstacleSpawner : MonoBehaviour
                 }
             }
 
-            laneIndex = candidate;
-            DebugLane($"accept lane {candidate}");
-            return true;
+            validLanes.Add(candidate);
         }
 
-        laneIndex = -1;
-        DebugLane("no valid lane; skipping spawn");
-        return false;
+        if (validLanes.Count == 0)
+        {
+            laneIndex = -1;
+            DebugLane("no valid lane; skipping spawn");
+            return false;
+        }
+
+        // Keep lane selection random, but prevent one lane from remaining the
+        // only consistently safe option when other valid lanes are available.
+        var overdueLanes = new List<int>(validLanes.Count);
+        foreach (int candidate in validLanes)
+        {
+            if (laneSelectionAge != null && laneSelectionAge[candidate] >= MaxLaneSelectionAge)
+            {
+                overdueLanes.Add(candidate);
+            }
+        }
+
+        var selectionPool = overdueLanes.Count > 0 ? overdueLanes : validLanes;
+        laneIndex = selectionPool[Random.Range(0, selectionPool.Count)];
+        DebugLane($"accept lane {laneIndex} | overdue {overdueLanes.Count}/{validLanes.Count}");
+        return true;
     }
 
     private bool IsLaneTooClose(int laneIndex)
@@ -249,6 +269,17 @@ public class ObstacleSpawner : MonoBehaviour
         previousSpawnTime = Time.time;
         lastSpawnGlobalTime = previousSpawnTime;
         lastLaneIndex = laneIndex;
+
+        if (laneSelectionAge != null)
+        {
+            for (int i = 0; i < laneSelectionAge.Length; i++)
+            {
+                laneSelectionAge[i] = Mathf.Min(MaxLaneSelectionAge, laneSelectionAge[i] + 1);
+            }
+
+            laneSelectionAge[laneIndex] = 0;
+        }
+
         lastLaneY[laneIndex] = spawnHeight;
         lastLaneSpeed[laneIndex] = speed;
         lastLaneTime[laneIndex] = Time.time;
@@ -267,6 +298,7 @@ public class ObstacleSpawner : MonoBehaviour
         lastLaneY = new float[count];
         lastLaneSpeed = new float[count];
         lastLaneTime = new float[count];
+        laneSelectionAge = new int[count];
         laneOccupants = new List<ObstacleLaneMarker>[count];
 
         for (int i = 0; i < count; i++)
