@@ -115,7 +115,7 @@ public class GameController : MonoBehaviour
 
         aliveTime += Time.deltaTime;
         TickScoreTimers();
-        TickDifficultyDebug();
+        TickRuntimeTimers();
     }
 
     private void InitializeRunState()
@@ -158,7 +158,7 @@ public class GameController : MonoBehaviour
         UpdateScoreText();
     }
 
-    private void TickDifficultyDebug()
+    private void TickRuntimeTimers()
     {
         if (invulnerabilityTimer > 0f)
         {
