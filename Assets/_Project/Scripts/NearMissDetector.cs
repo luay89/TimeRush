@@ -12,11 +12,15 @@ public class NearMissDetector : MonoBehaviour
     [SerializeField] private int bonusPoints = 5;
 
     private Collider cachedTrigger;
+    private Collider playerCollisionCollider;
+    private PlayerController playerController;
     private GameController cachedController;
 
     private void Awake()
     {
         cachedTrigger = GetComponent<Collider>();
+        playerCollisionCollider = transform.parent ? transform.parent.GetComponent<Collider>() : null;
+        playerController = GetComponentInParent<PlayerController>();
 
         if (cachedTrigger && !cachedTrigger.isTrigger)
         {
@@ -38,7 +42,7 @@ public class NearMissDetector : MonoBehaviour
             return;
         }
 
-        if (!IsEligibleCollider(other))
+        if (!IsEligibleCollider(other) || IsDirectCollision(other) || IsSameLane(other))
         {
             return;
         }
@@ -61,6 +65,34 @@ public class NearMissDetector : MonoBehaviour
         }
 
         controller.AddScore(bonusPoints, "NearMiss");
+    }
+
+    private bool IsDirectCollision(Collider other)
+    {
+        if (!playerCollisionCollider || !other)
+        {
+            return false;
+        }
+
+        return Physics.ComputePenetration(
+            playerCollisionCollider,
+            playerCollisionCollider.transform.position,
+            playerCollisionCollider.transform.rotation,
+            other,
+            other.transform.position,
+            other.transform.rotation,
+            out _,
+            out _);
+    }
+
+    private bool IsSameLane(Collider other)
+    {
+        if (!playerController || !other.TryGetComponent<ObstacleLaneMarker>(out var marker))
+        {
+            return false;
+        }
+
+        return marker.LaneIndex == playerController.CurrentLane;
     }
 
     private bool IsEligibleCollider(Collider other)

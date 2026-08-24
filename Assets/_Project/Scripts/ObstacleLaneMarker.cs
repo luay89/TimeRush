@@ -3,8 +3,11 @@ using UnityEngine;
 [DisallowMultipleComponent]
 public class ObstacleLaneMarker : MonoBehaviour
 {
+    [SerializeField] private float visualSpinDegreesPerSecond = 72f;
+
     public int LaneIndex { get; private set; } = -1;
 
+    private Transform visual;
     private ObstacleSpawner owner;
     private bool registered;
     private bool initialized;
@@ -31,9 +34,22 @@ public class ObstacleLaneMarker : MonoBehaviour
 
     private void OnEnable()
     {
+        if (!visual)
+        {
+            visual = transform.Find("Visual");
+        }
+
         if (initialized)
         {
             Register();
+        }
+    }
+
+    private void Update()
+    {
+        if (visual && Mathf.Abs(visualSpinDegreesPerSecond) > 0.01f)
+        {
+            visual.Rotate(Vector3.up, visualSpinDegreesPerSecond * Time.deltaTime, Space.Self);
         }
     }
 

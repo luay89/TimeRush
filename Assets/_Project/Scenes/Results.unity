@@ -522,7 +522,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3332cca9277a916f391e2d41cb076ccf, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  referenceResolution: {x: 1080, y: 1920}
+  referenceResolution: {x: 1920, y: 1080}
   buttonSpacing: 160
   continueButton: {fileID: 0}
   restartButton: {fileID: 0}
@@ -596,7 +596,7 @@ MonoBehaviour:
   m_UiScaleMode: 0
   m_ReferencePixelsPerUnit: 100
   m_ScaleFactor: 1
-  m_ReferenceResolution: {x: 800, y: 600}
+  m_ReferenceResolution: {x: 1920, y: 1080}
   m_ScreenMatchMode: 0
   m_MatchWidthOrHeight: 0
   m_PhysicalUnit: 3

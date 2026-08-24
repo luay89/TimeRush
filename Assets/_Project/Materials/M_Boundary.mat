@@ -30,4 +30,4 @@ Material:
     m_Ints: []
     m_Floats: []
     m_Colors:
-    - _Color: {r: 0.549019, g: 0.250980, b: 0.898039, a: 1}
+    - _Color: {r: 0.470588, g: 0.196078, b: 0.960784, a: 1}

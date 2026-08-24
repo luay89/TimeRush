@@ -4,6 +4,7 @@ using UnityEngine;
 
 public class ObstacleSpawner : MonoBehaviour
 {
+    private static readonly float[] RequiredLanePositions = { -2.5f, 0f, 2.5f };
     private const int MaxLaneSelectionAge = 3;
 
     [SerializeField] private GameObject obstaclePrefab;
@@ -47,6 +48,7 @@ public class ObstacleSpawner : MonoBehaviour
 
     private void Awake()
     {
+        NormalizeLanePositions();
         minLaneGap = Mathf.Max(2f, minLaneGap);
         lockWindowSeconds = Mathf.Max(0.2f, lockWindowSeconds);
         reactionTimeSeconds = Mathf.Max(0.2f, reactionTimeSeconds);
@@ -635,11 +637,26 @@ public class ObstacleSpawner : MonoBehaviour
         marker.Initialize(this, laneIndex);
     }
 
+    private void NormalizeLanePositions()
+    {
+        if (lanePositions == null || lanePositions.Length != RequiredLanePositions.Length)
+        {
+            lanePositions = (float[])RequiredLanePositions.Clone();
+            Debug.LogWarning("ObstacleSpawner: lanePositions reset to the required three lanes.", this);
+            return;
+        }
+
+        for (int i = 0; i < RequiredLanePositions.Length; i++)
+        {
+            lanePositions[i] = RequiredLanePositions[i];
+        }
+    }
+
     private bool ValidateLanes()
     {
-        if (lanePositions == null || lanePositions.Length < 2)
+        if (lanePositions == null || lanePositions.Length != RequiredLanePositions.Length)
         {
-            Debug.LogError("ObstacleSpawner: Configure at least two lane positions.", this);
+            Debug.LogError("ObstacleSpawner: Exactly three lane positions are required.", this);
             return false;
         }
 

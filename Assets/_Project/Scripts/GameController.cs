@@ -15,12 +15,12 @@ public class GameController : MonoBehaviour
     [System.Serializable]
     private class DifficultyProfile
     {
-        public float startSpawnInterval = 1.2f;
-        public float minSpawnInterval = 0.45f;
-        public float intervalDecayPerSecond = 0.02f;
-        public float startFallSpeed = 6f;
-        public float maxFallSpeed = 14f;
-        public float speedGainPerSecond = 0.25f;
+        public float startSpawnInterval = 1.35f;
+        public float minSpawnInterval = 0.55f;
+        public float intervalDecayPerSecond = 0.014f;
+        public float startFallSpeed = 5.5f;
+        public float maxFallSpeed = 12.5f;
+        public float speedGainPerSecond = 0.18f;
     }
 
     [Header("Scoring")]
@@ -45,6 +45,8 @@ public class GameController : MonoBehaviour
 
     public int CurrentScore { get; private set; }
     public int BestScore { get; private set; }
+    public event System.Action<string> FeedbackRaised;
+    public float AliveTime => aliveTime;
     public bool IsGameOver => _gameOver;
     public bool HasContinuedThisRun => hasContinuedThisRun;
     public bool IsPlayerInvulnerable => invulnerabilityTimer > 0f;
@@ -156,7 +158,7 @@ public class GameController : MonoBehaviour
         UpdateScoreText();
     }
 
-    private void TickRecoveryTimers()
+    private void TickDifficultyDebug()
     {
         if (invulnerabilityTimer > 0f)
         {
@@ -308,6 +310,11 @@ public class GameController : MonoBehaviour
         }
 
         UpdateScoreText();
+
+        if (!string.IsNullOrEmpty(reason))
+        {
+            FeedbackRaised?.Invoke(reason);
+        }
     }
 
     public float GetSpawnInterval()

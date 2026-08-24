@@ -17,7 +17,7 @@ public class ResultsController : MonoBehaviour
     private const string BestScoreKey = "BEST_SCORE";
 
     [Header("UI Auto-Build Settings")]
-    [SerializeField] private Vector2 referenceResolution = new Vector2(1080f, 1920f);
+    [SerializeField] private Vector2 referenceResolution = new Vector2(1920f, 1080f);
 
     [Header("UI References (Optional)")]
     [SerializeField] private Button continueButton;
@@ -360,7 +360,8 @@ public class ResultsController : MonoBehaviour
         tmp.text = textValue;
         tmp.alignment = TextAlignmentOptions.Center;
         tmp.fontSize = fontSize;
-        tmp.color = Color.black;
+        tmp.fontWeight = FontWeight.Bold;
+        tmp.color = new Color(0.015f, 0.025f, 0.075f, 1f);
         tmp.raycastTarget = false;
 
         var rect = tmp.GetComponent<RectTransform>();
@@ -390,8 +391,10 @@ public class ResultsController : MonoBehaviour
 
         label.fontSize = fontSize;
         label.alignment = TextAlignmentOptions.Center;
-        label.color = Color.white;
+        label.fontWeight = FontWeight.Bold;
+        label.color = new Color(0.95f, 0.98f, 1f, 1f);
         label.enableWordWrapping = false;
+        label.characterSpacing = 2f;
 
         if (addOutline)
         {
@@ -442,8 +445,8 @@ public class ResultsController : MonoBehaviour
         rect.sizeDelta = new Vector2(900f, 1400f);
 
         var layout = rootGO.AddComponent<VerticalLayoutGroup>();
-        layout.spacing = 40f;
-        layout.padding = new RectOffset(0, 0, 140, 80);
+        layout.spacing = 28f;
+        layout.padding = new RectOffset(0, 0, 96, 64);
         layout.childAlignment = TextAnchor.UpperCenter;
         layout.childControlWidth = true;
         layout.childControlHeight = false;
@@ -467,7 +470,7 @@ public class ResultsController : MonoBehaviour
         rect.sizeDelta = new Vector2(820f, 260f);
 
         var bg = panelGO.GetComponent<Image>();
-        bg.color = new Color(1f, 1f, 1f, 0.06f);
+        bg.color = new Color(0.035f, 0.055f, 0.12f, 0.96f);
         bg.raycastTarget = false;
 
         var layout = panelGO.AddComponent<VerticalLayoutGroup>();
@@ -492,10 +495,13 @@ public class ResultsController : MonoBehaviour
         go.transform.SetParent(parent, false);
 
         var label = go.GetComponent<TextMeshProUGUI>();
-        label.text = "GAME OVER";
+        label.text = "RUN ENDED";
         label.alignment = TextAlignmentOptions.Center;
-        label.fontSize = 120f;
-        label.color = Color.white;
+        label.fontSize = 116f;
+        label.fontWeight = FontWeight.Bold;
+        label.color = new Color(1f, 0.36f, 0.12f, 1f);
+        label.outlineColor = new Color(0.01f, 0.02f, 0.07f, 0.92f);
+        label.outlineWidth = 0.2f;
         label.raycastTarget = false;
 
         ConfigureGameOverTitle(label);
@@ -543,7 +549,7 @@ public class ResultsController : MonoBehaviour
         rect.sizeDelta = new Vector2(420f, 360f);
 
         var image = panelGO.GetComponent<Image>();
-        image.color = new Color(1f, 1f, 1f, 0.08f);
+        image.color = new Color(0.015f, 0.025f, 0.075f, 0.22f);
         image.raycastTarget = false;
 
         var layout = panelGO.AddComponent<VerticalLayoutGroup>();
@@ -580,11 +586,18 @@ public class ResultsController : MonoBehaviour
             rect.sizeDelta = new Vector2(360f, 90f);
         }
 
+        Color accent = button.name == ContinueButtonName
+            ? new Color(0.12f, 0.95f, 1f, 1f)
+            : button.name == MenuButtonName
+                ? new Color(0.56f, 0.34f, 1f, 1f)
+                : new Color(1f, 0.36f, 0.12f, 1f);
+
         var label = button.GetComponentInChildren<TextMeshProUGUI>();
         if (label)
         {
-            label.fontSize = 36f;
-            label.color = Color.black;
+            label.fontSize = 32f;
+            label.fontWeight = FontWeight.Bold;
+            label.color = new Color(0.015f, 0.025f, 0.075f, 1f);
             label.alignment = TextAlignmentOptions.Center;
             label.raycastTarget = false;
         }
@@ -592,8 +605,17 @@ public class ResultsController : MonoBehaviour
         var image = button.GetComponent<Image>();
         if (image)
         {
-            image.color = Color.white;
+            image.color = accent;
         }
+
+        var colors = button.colors;
+        colors.normalColor = accent;
+        colors.highlightedColor = Color.Lerp(accent, Color.white, 0.16f);
+        colors.pressedColor = Color.Lerp(accent, Color.black, 0.18f);
+        colors.selectedColor = colors.highlightedColor;
+        colors.disabledColor = new Color(accent.r, accent.g, accent.b, 0.3f);
+        colors.colorMultiplier = 1f;
+        button.colors = colors;
     }
 
     // =========================
