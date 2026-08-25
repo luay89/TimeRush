@@ -5,24 +5,30 @@ using UnityEngine;
 public class ObstacleSpawner : MonoBehaviour
 {
     private static readonly float[] RequiredLanePositions = { -2.5f, 0f, 2.5f };
+    private static readonly float[] DefaultDepthOffsets = { -1.5f, 0f, 1.5f };
     private const int MaxLaneSelectionAge = 3;
 
     [SerializeField] private GameObject obstaclePrefab;
     [SerializeField] private float fallbackInterval = 1.5f;
     [SerializeField] private float fallbackSpeed = 6f;
-    [SerializeField] private float spawnHeight = 10f;
+    [SerializeField] private float spawnHeight = 12f;
     [SerializeField] private bool ensureKillOnHit = true;
     [SerializeField] private float autoDestroyLifetime = 10f;
     [Header("Lane Spawning")]
     [SerializeField] private float[] lanePositions = new[] { -2.5f, 0f, 2.5f };
     [SerializeField] private float minLaneGap = 6f;
     [SerializeField] private bool preventSameLaneTwice = true;
+    [Header("Depth Variety")]
+    [SerializeField, Tooltip("Local road-depth offsets used to make individual hazards readable and varied.")]
+    private float[] depthOffsets = { -1.5f, 0f, 1.5f };
+    [SerializeField, Range(0.75f, 2f)] private float minDepthSeparation = 1.25f;
+    [SerializeField] private bool preventSameDepthTwice = true;
     [Header("Fairness")]
     [SerializeField] private bool enableFairnessRules = true;
     [SerializeField, Tooltip("Maximum time window where L+R spawns are treated as lock candidates.")]
     private float lockWindowSeconds = 1.2f;
     [SerializeField, Tooltip("Minimum reaction time between spawns that block different lanes.")]
-    private float reactionTimeSeconds = 0.6f;
+    private float reactionTimeSeconds = 0.9f;
     [SerializeField, Tooltip("Log lane picks and fairness rejections.")]
     private bool debugLaneDecisions;
     [Header("Occupancy")]
@@ -38,6 +44,7 @@ public class ObstacleSpawner : MonoBehaviour
     private float[] lastLaneTime;
     private int[] laneSelectionAge;
     private int lastLaneIndex = -1;
+    private int lastDepthIndex = -1;
     private int previousLaneIndex = -1;
     private int secondPreviousLaneIndex = -1;
     private float previousSpawnTime = float.NegativeInfinity;
@@ -49,7 +56,9 @@ public class ObstacleSpawner : MonoBehaviour
     private void Awake()
     {
         NormalizeLanePositions();
+        NormalizeDepthOffsets();
         minLaneGap = Mathf.Max(2f, minLaneGap);
+        minDepthSeparation = Mathf.Max(0.5f, minDepthSeparation);
         lockWindowSeconds = Mathf.Max(0.2f, lockWindowSeconds);
         reactionTimeSeconds = Mathf.Max(0.2f, reactionTimeSeconds);
         dangerRange = Mathf.Max(0.5f, dangerRange);
@@ -59,6 +68,12 @@ public class ObstacleSpawner : MonoBehaviour
             configInvalid = true;
             enabled = false;
             return;
+        }
+
+        if (!playerReference)
+        {
+            var playerController = FindObjectOfType<PlayerController>();
+            playerReference = playerController ? playerController.transform : null;
         }
 
         EnsureLaneArrays();
@@ -127,16 +142,91 @@ public class ObstacleSpawner : MonoBehaviour
             return false;
         }
 
+        if (!TrySelectDepth(laneIndex, out int depthIndex, out float spawnZ))
+        {
+            return false;
+        }
+
         float laneX = lanePositions[laneIndex];
-        Vector3 spawnPos = new Vector3(laneX, spawnHeight, transform.position.z);
+        Vector3 spawnPos = new Vector3(laneX, spawnHeight, spawnZ);
         var instance = Instantiate(obstaclePrefab, spawnPos, Quaternion.identity);
         EnsureKillOnHit(instance);
         EnsureAutoDestroy(instance);
         AttachLaneMarker(instance, laneIndex);
         ApplySpeed(instance, speed);
-        CommitLaneSpawn(laneIndex, speed);
-        DebugLane($"spawn lane {laneIndex} | {FormatLaneStates()}" );
+        CommitLaneSpawn(laneIndex, depthIndex, speed);
+        DebugLane($"spawn lane {laneIndex}, depth {depthIndex} | {FormatLaneStates()}" );
         return true;
+    }
+
+    private bool TrySelectDepth(int laneIndex, out int depthIndex, out float spawnZ)
+    {
+        var validDepths = new List<int>(depthOffsets.Length);
+        float variation = GameController.Instance ? GameController.Instance.GetDepthVariation() : 1f;
+
+        for (int i = 0; i < depthOffsets.Length; i++)
+        {
+            if (preventSameDepthTwice && depthOffsets.Length > 1 && i == lastDepthIndex)
+            {
+                continue;
+            }
+
+            float candidateZ = transform.position.z + depthOffsets[i] * variation;
+
+            if (IsDepthOccupied(laneIndex, candidateZ))
+            {
+                continue;
+            }
+
+            validDepths.Add(i);
+        }
+
+        if (validDepths.Count == 0)
+        {
+            depthIndex = -1;
+            spawnZ = transform.position.z;
+            DebugLane("no valid depth; skipping spawn");
+            return false;
+        }
+
+        depthIndex = validDepths[Random.Range(0, validDepths.Count)];
+        spawnZ = transform.position.z + depthOffsets[depthIndex] * variation;
+        return true;
+    }
+
+    private bool IsDepthOccupied(int laneIndex, float candidateZ)
+    {
+        if (laneOccupants == null || laneIndex < 0 || laneIndex >= laneOccupants.Length)
+        {
+            return false;
+        }
+
+        var list = laneOccupants[laneIndex];
+        CleanupLaneList(list);
+
+        if (list == null)
+        {
+            return false;
+        }
+
+        float playerY = playerReference ? playerReference.position.y : 0f;
+
+        for (int i = 0; i < list.Count; i++)
+        {
+            var marker = list[i];
+
+            if (!marker || marker.CurrentHeight < playerY - 0.5f)
+            {
+                continue;
+            }
+
+            if (Mathf.Abs(marker.CurrentDepth - candidateZ) < minDepthSeparation)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void ApplySpeed(GameObject obstacleInstance, float speed)
@@ -258,7 +348,7 @@ public class ObstacleSpawner : MonoBehaviour
         return estimatedY > allowedY;
     }
 
-    private void CommitLaneSpawn(int laneIndex, float speed)
+    private void CommitLaneSpawn(int laneIndex, int depthIndex, float speed)
     {
         if (lastLaneY == null || laneIndex < 0 || laneIndex >= lastLaneY.Length)
         {
@@ -271,6 +361,7 @@ public class ObstacleSpawner : MonoBehaviour
         previousSpawnTime = Time.time;
         lastSpawnGlobalTime = previousSpawnTime;
         lastLaneIndex = laneIndex;
+        lastDepthIndex = depthIndex;
 
         if (laneSelectionAge != null)
         {
@@ -649,6 +740,21 @@ public class ObstacleSpawner : MonoBehaviour
         for (int i = 0; i < RequiredLanePositions.Length; i++)
         {
             lanePositions[i] = RequiredLanePositions[i];
+        }
+    }
+
+    private void NormalizeDepthOffsets()
+    {
+        if (depthOffsets == null || depthOffsets.Length < 2)
+        {
+            depthOffsets = (float[])DefaultDepthOffsets.Clone();
+            Debug.LogWarning("ObstacleSpawner: depthOffsets reset to the default road-depth offsets.", this);
+            return;
+        }
+
+        for (int i = 0; i < depthOffsets.Length; i++)
+        {
+            depthOffsets[i] = Mathf.Clamp(depthOffsets[i], -2f, 2f);
         }
     }
 

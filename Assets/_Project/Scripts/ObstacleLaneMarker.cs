@@ -13,6 +13,7 @@ public class ObstacleLaneMarker : MonoBehaviour
     private bool initialized;
 
     public float CurrentHeight => transform.position.y;
+    public float CurrentDepth => transform.position.z;
 
     public void Initialize(ObstacleSpawner spawner, int laneIndex)
     {

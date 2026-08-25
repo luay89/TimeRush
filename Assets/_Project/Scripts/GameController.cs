@@ -15,12 +15,12 @@ public class GameController : MonoBehaviour
     [System.Serializable]
     private class DifficultyProfile
     {
-        public float startSpawnInterval = 1.35f;
-        public float minSpawnInterval = 0.55f;
-        public float intervalDecayPerSecond = 0.014f;
-        public float startFallSpeed = 5.5f;
-        public float maxFallSpeed = 12.5f;
-        public float speedGainPerSecond = 0.18f;
+        public float startSpawnInterval = 1.65f;
+        public float minSpawnInterval = 0.85f;
+        public float intervalDecayPerSecond = 0.0065f;
+        public float startFallSpeed = 4.3f;
+        public float maxFallSpeed = 8.8f;
+        public float speedGainPerSecond = 0.04f;
     }
 
     [Header("Scoring")]
@@ -115,7 +115,7 @@ public class GameController : MonoBehaviour
 
         aliveTime += Time.deltaTime;
         TickScoreTimers();
-        TickRuntimeTimers();
+        TickDifficultyDebug();
     }
 
     private void InitializeRunState()
@@ -337,6 +337,22 @@ public class GameController : MonoBehaviour
 
         float speed = difficultyProfile.startFallSpeed + difficultyProfile.speedGainPerSecond * GetEffectiveAliveTime();
         return Mathf.Min(difficultyProfile.maxFallSpeed, speed);
+    }
+
+    public float GetPaceMultiplier()
+    {
+        if (difficultyProfile == null || difficultyProfile.startFallSpeed <= 0f)
+        {
+            return 1f;
+        }
+
+        return GetObstacleSpeed() / difficultyProfile.startFallSpeed;
+    }
+
+    public float GetDepthVariation()
+    {
+        float progress = Mathf.InverseLerp(0f, 90f, GetEffectiveAliveTime());
+        return Mathf.Lerp(0.7f, 1f, progress);
     }
 
     private float GetEffectiveAliveTime()

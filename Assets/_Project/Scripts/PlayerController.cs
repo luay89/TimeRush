@@ -1,8 +1,8 @@
 using UnityEngine;
 
 /// <summary>
-/// Handles direct, readable lane changes for the three-lane TimeRush track.
-/// Movement remains transform-based to preserve the existing scene Rigidbody and collision setup.
+/// Keeps TimeRush readable: the player switches between three fixed lanes while
+/// using a short, clamped depth range to dodge fair forward/back obstacle layouts.
 /// </summary>
 public class PlayerController : MonoBehaviour
 {
@@ -10,9 +10,16 @@ public class PlayerController : MonoBehaviour
 
     [Header("Three-Lane Movement")]
     [SerializeField] private float[] lanePositions = { -2.5f, 0f, 2.5f };
-    [SerializeField] private float moveSpeed = 18f;
+    [SerializeField] private float laneMoveSpeed = 18f;
     [SerializeField, Range(0.05f, 0.3f)] private float laneChangeDuration = 0.12f;
     [SerializeField] private int startingLane = 1;
+
+    [Header("Safe Forward / Back Movement")]
+    [SerializeField] private float forwardBackSpeed = 7.5f;
+    [SerializeField, Range(0.05f, 0.3f)] private float depthChangeDuration = 0.14f;
+    [SerializeField, Range(1.25f, 3f)] private float safeDepthRange = 2f;
+
+    [Header("Input and Feedback")]
     [SerializeField] private bool allowTouchSwipe = true;
     [SerializeField] private bool enableNearMissFeedback = true;
     [SerializeField, Range(3.5f, 5.2f)] private float nearMissWidth = 4.8f;
@@ -20,22 +27,31 @@ public class PlayerController : MonoBehaviour
 
     private int currentLane;
     private float laneVelocity;
+    private float depthVelocity;
+    private float trackCenterZ;
+    private float targetDepthZ;
     private Transform visual;
     private Vector2 pointerDownPosition;
     private bool trackingPointer;
 
     public int CurrentLane => currentLane;
+    public float CurrentTrackDepth => transform.position.z;
+    public float MinimumSafeDepth => trackCenterZ - safeDepthRange;
+    public float MaximumSafeDepth => trackCenterZ + safeDepthRange;
     public float LaneChangeProgress { get; private set; }
 
     private void Awake()
     {
         EnsureLaneConfiguration();
         currentLane = Mathf.Clamp(startingLane, 0, lanePositions.Length - 1);
+        trackCenterZ = transform.position.z;
+        targetDepthZ = trackCenterZ;
         visual = transform.Find("Visual");
         EnsureNearMissDetector();
 
         var position = transform.position;
         position.x = lanePositions[currentLane];
+        position.z = Mathf.Clamp(position.z, MinimumSafeDepth, MaximumSafeDepth);
         transform.position = position;
     }
 
@@ -43,7 +59,7 @@ public class PlayerController : MonoBehaviour
     {
         ReadKeyboardInput();
         ReadTouchInput();
-        MoveTowardsTargetLane();
+        MoveTowardsTargets();
         UpdateVisualMotion();
     }
 
@@ -56,6 +72,26 @@ public class PlayerController : MonoBehaviour
         else if (Input.GetKeyDown(KeyCode.RightArrow) || Input.GetKeyDown(KeyCode.D))
         {
             ChangeLane(1);
+        }
+
+        float depthInput = 0f;
+
+        if (Input.GetKey(KeyCode.W) || Input.GetKey(KeyCode.UpArrow))
+        {
+            depthInput += 1f;
+        }
+
+        if (Input.GetKey(KeyCode.S) || Input.GetKey(KeyCode.DownArrow))
+        {
+            depthInput -= 1f;
+        }
+
+        if (Mathf.Abs(depthInput) > 0.01f)
+        {
+            targetDepthZ = Mathf.Clamp(
+                targetDepthZ + depthInput * forwardBackSpeed * Time.deltaTime,
+                MinimumSafeDepth,
+                MaximumSafeDepth);
         }
     }
 
@@ -87,6 +123,12 @@ public class PlayerController : MonoBehaviour
         if (Mathf.Abs(delta.x) >= threshold && Mathf.Abs(delta.x) > Mathf.Abs(delta.y))
         {
             ChangeLane(delta.x > 0f ? 1 : -1);
+            return;
+        }
+
+        if (Mathf.Abs(delta.y) >= threshold)
+        {
+            ShiftDepth(delta.y > 0f ? 1f : -1f);
         }
     }
 
@@ -103,21 +145,29 @@ public class PlayerController : MonoBehaviour
         LaneChangeProgress = 0f;
     }
 
-    private void MoveTowardsTargetLane()
+    private void ShiftDepth(float direction)
     {
-        float targetX = lanePositions[currentLane];
-        Vector3 position = transform.position;
-        float previousDistance = Mathf.Abs(targetX - position.x);
-        float smoothTime = Mathf.Max(0.05f, laneChangeDuration);
+        float step = Mathf.Min(1.5f, safeDepthRange);
+        targetDepthZ = Mathf.Clamp(targetDepthZ + direction * step, MinimumSafeDepth, MaximumSafeDepth);
+    }
 
-        position.x = Mathf.SmoothDamp(position.x, targetX, ref laneVelocity, smoothTime, moveSpeed * 2f, Time.deltaTime);
+    private void MoveTowardsTargets()
+    {
+        Vector3 position = transform.position;
+        float targetX = lanePositions[currentLane];
+        float laneSmoothTime = Mathf.Max(0.05f, laneChangeDuration);
+        float depthSmoothTime = Mathf.Max(0.05f, depthChangeDuration);
+
+        position.x = Mathf.SmoothDamp(position.x, targetX, ref laneVelocity, laneSmoothTime, laneMoveSpeed * 2f, Time.deltaTime);
         position.x = Mathf.Clamp(position.x, lanePositions[0], lanePositions[lanePositions.Length - 1]);
+
+        targetDepthZ = Mathf.Clamp(targetDepthZ, MinimumSafeDepth, MaximumSafeDepth);
+        position.z = Mathf.SmoothDamp(position.z, targetDepthZ, ref depthVelocity, depthSmoothTime, forwardBackSpeed, Time.deltaTime);
+        position.z = Mathf.Clamp(position.z, MinimumSafeDepth, MaximumSafeDepth);
         transform.position = position;
 
-        float currentDistance = Mathf.Abs(targetX - position.x);
-        LaneChangeProgress = previousDistance <= 0.001f
-            ? 1f
-            : Mathf.Clamp01(1f - (currentDistance / previousDistance));
+        float laneDistance = Mathf.Abs(targetX - position.x);
+        LaneChangeProgress = Mathf.Clamp01(1f - laneDistance / 2.5f);
     }
 
     private void UpdateVisualMotion()
@@ -127,8 +177,9 @@ public class PlayerController : MonoBehaviour
             return;
         }
 
-        float tilt = Mathf.Clamp(-laneVelocity * 1.35f, -14f, 14f);
-        Quaternion targetRotation = Quaternion.Euler(0f, 0f, tilt);
+        float laneTilt = Mathf.Clamp(-laneVelocity * 1.35f, -14f, 14f);
+        float depthTilt = Mathf.Clamp(depthVelocity * 0.9f, -8f, 8f);
+        Quaternion targetRotation = Quaternion.Euler(depthTilt, 0f, laneTilt);
         visual.localRotation = Quaternion.Slerp(visual.localRotation, targetRotation, 14f * Time.deltaTime);
     }
 

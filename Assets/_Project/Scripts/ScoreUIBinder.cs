@@ -154,7 +154,7 @@ public class ScoreUIBinder : MonoBehaviour
             survivalTimeLabel?.SetText(string.Format("TIME  {0:00}:{1:00}", Mathf.FloorToInt(survivalTime / 60f), Mathf.FloorToInt(survivalTime % 60f)));
         }
 
-        float pace = gc.GetObstacleSpeed() / 5.5f;
+        float pace = gc.GetPaceMultiplier();
         if (force || Mathf.Abs(pace - lastDisplayedPace) >= 0.01f)
         {
             lastDisplayedPace = pace;
@@ -163,7 +163,7 @@ public class ScoreUIBinder : MonoBehaviour
 
         if (statusLabel && feedbackTimer <= 0f)
         {
-            statusLabel.SetText(gc.IsGameOver ? "RUN ENDED" : "RUNNING  //  SHIFT LANES TO DODGE");
+            statusLabel.SetText(gc.IsGameOver ? "RUN ENDED" : "A/D  LANE  //  W/S  DEPTH");
         }
     }
 

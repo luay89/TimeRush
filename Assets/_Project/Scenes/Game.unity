@@ -275,7 +275,7 @@ MonoBehaviour:
   obstaclePrefab: {fileID: 2831478935618217927, guid: ef6b039ace42499689641e0508ec145b, type: 3}
   spawnInterval: 1.5
   spawnRangeX: 4
-  spawnHeight: 10
+  spawnHeight: 12
   ensureKillOnHit: 1
 --- !u!1 &751755595
 GameObject:
@@ -337,7 +337,7 @@ Camera:
     height: 1
   near clip plane: 0.3
   far clip plane: 1000
-  field of view: 52
+  field of view: 58
   orthographic: 0
   orthographic size: 5
   m_Depth: -1
@@ -364,7 +364,7 @@ Transform:
   m_GameObject: {fileID: 751755595}
   serializedVersion: 2
   m_LocalRotation: {x: 0.21643962, y: 0, z: 0, w: 0.97629601}
-  m_LocalPosition: {x: 0, y: 7, z: -14}
+  m_LocalPosition: {x: 0, y: 8, z: -17}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -383,7 +383,7 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier:
   target: {fileID: 1097900771}
-  offset: {x: 0, y: 7, z: -14}
+  offset: {x: 0, y: 8, z: -17}
   followSpeed: 8
 --- !u!1 &1097900766
 GameObject:
