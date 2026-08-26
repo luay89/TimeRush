@@ -16,7 +16,7 @@ public class ObstacleSpawner : MonoBehaviour
     [SerializeField] private float autoDestroyLifetime = 10f;
     [Header("Lane Spawning")]
     [SerializeField] private float[] lanePositions = new[] { -2.5f, 0f, 2.5f };
-    [SerializeField] private float minLaneGap = 6f;
+    [SerializeField] private float minLaneGap = 7f;
     [SerializeField] private bool preventSameLaneTwice = true;
     [Header("Depth Variety")]
     [SerializeField, Tooltip("Local road-depth offsets used to make individual hazards readable and varied.")]
@@ -26,9 +26,9 @@ public class ObstacleSpawner : MonoBehaviour
     [Header("Fairness")]
     [SerializeField] private bool enableFairnessRules = true;
     [SerializeField, Tooltip("Maximum time window where L+R spawns are treated as lock candidates.")]
-    private float lockWindowSeconds = 1.2f;
+    private float lockWindowSeconds = 1.4f;
     [SerializeField, Tooltip("Minimum reaction time between spawns that block different lanes.")]
-    private float reactionTimeSeconds = 0.9f;
+    private float reactionTimeSeconds = 1f;
     [SerializeField, Tooltip("Log lane picks and fairness rejections.")]
     private bool debugLaneDecisions;
     [Header("Occupancy")]
