@@ -28,6 +28,11 @@ public class GameController : MonoBehaviour
     [SerializeField] private float scorePerSecond = 10f;
     [SerializeField] private float uiUpdateInterval = 0.1f;
 
+    [Header("Mastery Flow")]
+    [SerializeField, Range(2, 5)] private int nearMissesPerFlowLevel = 3;
+    [SerializeField, Range(2, 4)] private int maxFlowMultiplier = 4;
+    [SerializeField, Range(3f, 10f)] private float flowRetentionSeconds = 6f;
+
     [Header("Debug")]
     [SerializeField] private bool showDifficultyDebug;
     [SerializeField] private TextMeshProUGUI difficultyDebugText;
@@ -52,6 +57,10 @@ public class GameController : MonoBehaviour
     public bool HasContinuedThisRun => hasContinuedThisRun;
     public bool IsPlayerInvulnerable => invulnerabilityTimer > 0f;
     public bool IsInTrainingWindow => difficultyProfile != null && GetEffectiveAliveTime() < difficultyProfile.trainingDuration;
+    public int NearMissChain { get; private set; }
+    public int LastNearMissAward { get; private set; }
+    public float FlowTimeRemaining => flowTimer;
+    public int FlowMultiplier => CalculateFlowMultiplier(NearMissChain);
 
     // Static flag ensures we never queue multiple continue-driven scene reloads simultaneously.
     private static bool continueSceneLoadInProgress;
@@ -69,6 +78,7 @@ public class GameController : MonoBehaviour
     private float difficultyDebugTimer;
     private float invulnerabilityTimer;
     private float difficultyEaseTimer;
+    private float flowTimer;
     private TextMeshProUGUI scoreText;
 
     private void Awake()
@@ -156,6 +166,7 @@ public class GameController : MonoBehaviour
         aliveTime = 0f;
         invulnerabilityTimer = Mathf.Max(0f, continueInvulnerabilitySeconds);
         difficultyEaseTimer = Mathf.Max(0f, continueDifficultyEaseSeconds);
+        ResetFlow();
         ScoreSnapshot.Clear();
         UpdateScoreText();
     }
@@ -170,6 +181,16 @@ public class GameController : MonoBehaviour
         if (difficultyEaseTimer > 0f)
         {
             difficultyEaseTimer = Mathf.Max(0f, difficultyEaseTimer - Time.deltaTime);
+        }
+
+        if (flowTimer > 0f)
+        {
+            flowTimer = Mathf.Max(0f, flowTimer - Time.deltaTime);
+
+            if (flowTimer <= 0f)
+            {
+                ResetFlow();
+            }
         }
     }
 
@@ -319,6 +340,23 @@ public class GameController : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Rewards precision only; ordinary survival score remains stable and readable.
+    /// Consecutive near misses build a short-lived multiplier that resets on timeout.
+    /// </summary>
+    public void RegisterNearMiss(int baseBonus)
+    {
+        if (_gameOver || baseBonus <= 0)
+        {
+            return;
+        }
+
+        NearMissChain = Mathf.Min(NearMissChain + 1, MaxFlowChain);
+        flowTimer = Mathf.Max(0.1f, flowRetentionSeconds);
+        LastNearMissAward = baseBonus * FlowMultiplier;
+        AddScore(LastNearMissAward, "NearMiss");
+    }
+
     public float GetSpawnInterval()
     {
         if (difficultyProfile == null)
@@ -400,6 +438,27 @@ public class GameController : MonoBehaviour
         return aliveTime * multiplier;
     }
 
+    private int MaxFlowChain => Mathf.Max(1, nearMissesPerFlowLevel) * Mathf.Max(1, maxFlowMultiplier - 1);
+
+    private int CalculateFlowMultiplier(int chain)
+    {
+        if (chain <= 0)
+        {
+            return 1;
+        }
+
+        int step = Mathf.Max(1, nearMissesPerFlowLevel);
+        int multiplier = 1 + (chain / step);
+        return Mathf.Clamp(multiplier, 1, Mathf.Max(1, maxFlowMultiplier));
+    }
+
+    private void ResetFlow()
+    {
+        NearMissChain = 0;
+        LastNearMissAward = 0;
+        flowTimer = 0f;
+    }
+
     private void ResetScoreState()
     {
         // Full run reset used when starting from boot or after the player selects Restart.
@@ -411,6 +470,7 @@ public class GameController : MonoBehaviour
         hasContinuedThisRun = false;
         invulnerabilityTimer = 0f;
         difficultyEaseTimer = 0f;
+        ResetFlow();
         resultsSceneLoadRequested = false;
         ScoreSnapshot.Clear();
         UpdateScoreText();

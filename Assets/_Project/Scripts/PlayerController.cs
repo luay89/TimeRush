@@ -31,6 +31,8 @@ public class PlayerController : MonoBehaviour
     private float trackCenterZ;
     private float targetDepthZ;
     private Transform visual;
+    private Vector3 baseVisualScale = Vector3.one;
+    private float movementPulse;
     private Vector2 pointerDownPosition;
     private bool trackingPointer;
 
@@ -47,6 +49,12 @@ public class PlayerController : MonoBehaviour
         trackCenterZ = transform.position.z;
         targetDepthZ = trackCenterZ;
         visual = transform.Find("Visual");
+
+        if (visual)
+        {
+            baseVisualScale = visual.localScale;
+        }
+
         EnsureNearMissDetector();
 
         var position = transform.position;
@@ -143,12 +151,14 @@ public class PlayerController : MonoBehaviour
 
         currentLane = requestedLane;
         LaneChangeProgress = 0f;
+        movementPulse = 1f;
     }
 
     private void ShiftDepth(float direction)
     {
         float step = Mathf.Min(1.5f, safeDepthRange);
         targetDepthZ = Mathf.Clamp(targetDepthZ + direction * step, MinimumSafeDepth, MaximumSafeDepth);
+        movementPulse = Mathf.Max(movementPulse, 0.65f);
     }
 
     private void MoveTowardsTargets()
@@ -181,6 +191,10 @@ public class PlayerController : MonoBehaviour
         float depthTilt = Mathf.Clamp(depthVelocity * 0.9f, -8f, 8f);
         Quaternion targetRotation = Quaternion.Euler(depthTilt, 0f, laneTilt);
         visual.localRotation = Quaternion.Slerp(visual.localRotation, targetRotation, 14f * Time.deltaTime);
+
+        movementPulse = Mathf.MoveTowards(movementPulse, 0f, 6f * Time.deltaTime);
+        float scale = 1f + movementPulse * 0.075f;
+        visual.localScale = Vector3.Lerp(visual.localScale, baseVisualScale * scale, 16f * Time.deltaTime);
     }
 
     private void EnsureNearMissDetector()

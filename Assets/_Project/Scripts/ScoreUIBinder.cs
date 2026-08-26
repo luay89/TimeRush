@@ -15,10 +15,12 @@ public class ScoreUIBinder : MonoBehaviour
     [SerializeField] private TextMeshProUGUI survivalTimeLabel;
     [SerializeField] private TextMeshProUGUI statusLabel;
     [SerializeField] private TextMeshProUGUI paceLabel;
+    [SerializeField] private TextMeshProUGUI flowLabel;
 
     private int lastBest = int.MinValue;
     private float lastDisplayedTime = -1f;
     private float lastDisplayedPace = -1f;
+    private int lastDisplayedFlow = int.MinValue;
     private float feedbackTimer;
 
     private static readonly Color Cyan = new Color(0.12f, 0.95f, 1f, 1f);
@@ -94,10 +96,12 @@ public class ScoreUIBinder : MonoBehaviour
         survivalTimeLabel = survivalTimeLabel ? survivalTimeLabel : CreateLabel("SurvivalTimeLabel");
         statusLabel = statusLabel ? statusLabel : CreateLabel("StatusLabel");
         paceLabel = paceLabel ? paceLabel : CreateLabel("PaceLabel");
+        flowLabel = flowLabel ? flowLabel : CreateLabel("FlowLabel");
 
         ConfigureExistingLabel(survivalTimeLabel, TextAlignmentOptions.Center, 48f, White, new Vector2(0f, -46f), new Vector2(430f, 86f), new Vector2(0.5f, 1f));
         ConfigureExistingLabel(statusLabel, TextAlignmentOptions.Center, 22f, Cyan, new Vector2(0f, -126f), new Vector2(640f, 48f), new Vector2(0.5f, 1f));
         ConfigureExistingLabel(paceLabel, TextAlignmentOptions.Right, 24f, Violet, new Vector2(-56f, -112f), new Vector2(360f, 48f), new Vector2(1f, 1f));
+        ConfigureExistingLabel(flowLabel, TextAlignmentOptions.Left, 24f, Violet, new Vector2(56f, -150f), new Vector2(420f, 50f), new Vector2(0f, 1f));
     }
 
     private TextMeshProUGUI FindLabel(string objectName)
@@ -161,6 +165,25 @@ public class ScoreUIBinder : MonoBehaviour
             paceLabel?.SetText(string.Format("PACE  {0:0.00}x", pace));
         }
 
+        int flow = gc.NearMissChain;
+        if (force || flow != lastDisplayedFlow)
+        {
+            lastDisplayedFlow = flow;
+
+            if (flowLabel)
+            {
+                if (flow > 0 && gc.FlowTimeRemaining > 0f)
+                {
+                    flowLabel.color = new Color(Violet.r, Violet.g, Violet.b, Mathf.Clamp01(0.35f + gc.FlowTimeRemaining / 6f));
+                    flowLabel.SetText(string.Format("FLOW  x{0}  //  {1}", gc.FlowMultiplier, flow));
+                }
+                else
+                {
+                    flowLabel.SetText(string.Empty);
+                }
+            }
+        }
+
         if (statusLabel && feedbackTimer <= 0f)
         {
             if (gc.IsGameOver)
@@ -186,7 +209,12 @@ public class ScoreUIBinder : MonoBehaviour
 
         feedbackTimer = 1.15f;
         statusLabel.color = Cyan;
-        statusLabel.SetText("NEAR MISS  //  +5");
+        var gc = GameController.Instance;
+        int award = gc ? gc.LastNearMissAward : 5;
+        int multiplier = gc ? gc.FlowMultiplier : 1;
+        statusLabel.SetText(multiplier > 1
+            ? string.Format("NEAR MISS  //  +{0}  x{1}", award, multiplier)
+            : string.Format("NEAR MISS  //  +{0}", award));
     }
 
     private void RefreshBest(GameController gc)

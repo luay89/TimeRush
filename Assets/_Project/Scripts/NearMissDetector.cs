@@ -64,7 +64,7 @@ public class NearMissDetector : MonoBehaviour
             return;
         }
 
-        controller.AddScore(bonusPoints, "NearMiss");
+        controller.RegisterNearMiss(bonusPoints);
     }
 
     private bool IsDirectCollision(Collider other)
