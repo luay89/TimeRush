@@ -4,8 +4,8 @@ using UnityEngine;
 public class ObstacleLaneMarker : MonoBehaviour
 {
     [SerializeField] private float visualSpinDegreesPerSecond = 72f;
-    [SerializeField, Range(0.5f, 1f)] private float farVisualScale = 0.72f;
-    [SerializeField, Range(1f, 1.4f)] private float nearVisualScale = 1.15f;
+    [SerializeField, Range(0.5f, 1f)] private float farVisualScale = 0.62f;
+    [SerializeField, Range(1f, 1.4f)] private float nearVisualScale = 1.12f;
     [SerializeField] private float dangerHeight = 4.5f;
 
     public int LaneIndex { get; private set; } = -1;
