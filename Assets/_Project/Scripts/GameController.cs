@@ -15,12 +15,13 @@ public class GameController : MonoBehaviour
     [System.Serializable]
     private class DifficultyProfile
     {
-        public float startSpawnInterval = 1.65f;
+        public float trainingDuration = 25f;
+        public float maxDifficultySeconds = 120f;
+        [Range(0.05f, 0.35f)] public float trainingMaxProgress = 0.18f;
+        public float startSpawnInterval = 1.9f;
         public float minSpawnInterval = 0.85f;
-        public float intervalDecayPerSecond = 0.0065f;
-        public float startFallSpeed = 4.3f;
-        public float maxFallSpeed = 8.8f;
-        public float speedGainPerSecond = 0.04f;
+        public float startFallSpeed = 4.1f;
+        public float maxFallSpeed = 8.5f;
     }
 
     [Header("Scoring")]
@@ -50,6 +51,7 @@ public class GameController : MonoBehaviour
     public bool IsGameOver => _gameOver;
     public bool HasContinuedThisRun => hasContinuedThisRun;
     public bool IsPlayerInvulnerable => invulnerabilityTimer > 0f;
+    public bool IsInTrainingWindow => difficultyProfile != null && GetEffectiveAliveTime() < difficultyProfile.trainingDuration;
 
     // Static flag ensures we never queue multiple continue-driven scene reloads simultaneously.
     private static bool continueSceneLoadInProgress;
@@ -324,8 +326,7 @@ public class GameController : MonoBehaviour
             return 1f;
         }
 
-        float interval = difficultyProfile.startSpawnInterval - difficultyProfile.intervalDecayPerSecond * GetEffectiveAliveTime();
-        return Mathf.Max(difficultyProfile.minSpawnInterval, interval);
+        return Mathf.Lerp(difficultyProfile.startSpawnInterval, difficultyProfile.minSpawnInterval, GetDifficultyProgress());
     }
 
     public float GetObstacleSpeed()
@@ -335,8 +336,7 @@ public class GameController : MonoBehaviour
             return 0f;
         }
 
-        float speed = difficultyProfile.startFallSpeed + difficultyProfile.speedGainPerSecond * GetEffectiveAliveTime();
-        return Mathf.Min(difficultyProfile.maxFallSpeed, speed);
+        return Mathf.Lerp(difficultyProfile.startFallSpeed, difficultyProfile.maxFallSpeed, GetDifficultyProgress());
     }
 
     public float GetPaceMultiplier()
@@ -351,8 +351,40 @@ public class GameController : MonoBehaviour
 
     public float GetDepthVariation()
     {
-        float progress = Mathf.InverseLerp(0f, 90f, GetEffectiveAliveTime());
-        return Mathf.Lerp(0.7f, 1f, progress);
+        return Mathf.Lerp(0.65f, 1f, GetDifficultyProgress());
+    }
+
+    public float GetControlHintOpacity()
+    {
+        if (difficultyProfile == null)
+        {
+            return 0f;
+        }
+
+        float fadeStart = Mathf.Max(0f, difficultyProfile.trainingDuration - 5f);
+        float fadeEnd = difficultyProfile.trainingDuration + 3f;
+        float fade = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(fadeStart, fadeEnd, GetEffectiveAliveTime()));
+        return 1f - fade;
+    }
+
+    private float GetDifficultyProgress()
+    {
+        if (difficultyProfile == null)
+        {
+            return 0f;
+        }
+
+        float cappedTime = Mathf.Min(GetEffectiveAliveTime(), Mathf.Max(difficultyProfile.trainingDuration + 1f, difficultyProfile.maxDifficultySeconds));
+        float trainingDuration = Mathf.Max(1f, difficultyProfile.trainingDuration);
+
+        if (cappedTime <= trainingDuration)
+        {
+            return Mathf.Lerp(0f, difficultyProfile.trainingMaxProgress, cappedTime / trainingDuration);
+        }
+
+        float arcadeProgress = Mathf.InverseLerp(trainingDuration, difficultyProfile.maxDifficultySeconds, cappedTime);
+        float easedArcadeProgress = Mathf.SmoothStep(0f, 1f, arcadeProgress);
+        return Mathf.Lerp(difficultyProfile.trainingMaxProgress, 1f, easedArcadeProgress);
     }
 
     private float GetEffectiveAliveTime()
@@ -409,7 +441,7 @@ public class GameController : MonoBehaviour
         }
 
         difficultyDebugTimer = 0f;
-        difficultyDebugText.SetText("Spawn: {0:0.00}s\nSpeed: {1:0.0}", GetSpawnInterval(), GetObstacleSpeed());
+        difficultyDebugText.SetText("Spawn: {0:0.00}s\nSpeed: {1:0.0}\n{2}", GetSpawnInterval(), GetObstacleSpeed(), IsInTrainingWindow ? "LEARN" : "ARCADE");
     }
 
     private void HandleSceneLoaded(Scene scene, LoadSceneMode mode)

@@ -275,7 +275,7 @@ MonoBehaviour:
   obstaclePrefab: {fileID: 2831478935618217927, guid: ef6b039ace42499689641e0508ec145b, type: 3}
   spawnInterval: 1.5
   spawnRangeX: 4
-  spawnHeight: 12
+  spawnHeight: 13.5
   ensureKillOnHit: 1
 --- !u!1 &751755595
 GameObject:

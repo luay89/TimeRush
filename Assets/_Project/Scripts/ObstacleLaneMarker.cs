@@ -4,6 +4,9 @@ using UnityEngine;
 public class ObstacleLaneMarker : MonoBehaviour
 {
     [SerializeField] private float visualSpinDegreesPerSecond = 72f;
+    [SerializeField, Range(0.5f, 1f)] private float farVisualScale = 0.72f;
+    [SerializeField, Range(1f, 1.4f)] private float nearVisualScale = 1.15f;
+    [SerializeField] private float dangerHeight = 4.5f;
 
     public int LaneIndex { get; private set; } = -1;
 
@@ -11,14 +14,17 @@ public class ObstacleLaneMarker : MonoBehaviour
     private ObstacleSpawner owner;
     private bool registered;
     private bool initialized;
+    private float spawnHeight = 13.5f;
+    private Vector3 baseVisualScale = Vector3.one;
 
     public float CurrentHeight => transform.position.y;
     public float CurrentDepth => transform.position.z;
 
-    public void Initialize(ObstacleSpawner spawner, int laneIndex)
+    public void Initialize(ObstacleSpawner spawner, int laneIndex, float initialSpawnHeight)
     {
         owner = spawner;
         LaneIndex = laneIndex;
+        spawnHeight = Mathf.Max(dangerHeight + 0.1f, initialSpawnHeight);
         if (LaneIndex < 0)
         {
             return;
@@ -40,6 +46,11 @@ public class ObstacleLaneMarker : MonoBehaviour
             visual = transform.Find("Visual");
         }
 
+        if (visual)
+        {
+            baseVisualScale = visual.localScale;
+        }
+
         if (initialized)
         {
             Register();
@@ -52,6 +63,27 @@ public class ObstacleLaneMarker : MonoBehaviour
         {
             visual.Rotate(Vector3.up, visualSpinDegreesPerSecond * Time.deltaTime, Space.Self);
         }
+
+        UpdateApproachVisual();
+    }
+
+    private void UpdateApproachVisual()
+    {
+        if (!visual)
+        {
+            return;
+        }
+
+        float range = Mathf.Max(0.1f, spawnHeight - dangerHeight);
+        float approach = Mathf.Clamp01((spawnHeight - transform.position.y) / range);
+        float scale = Mathf.Lerp(farVisualScale, nearVisualScale, approach);
+
+        if (transform.position.y <= dangerHeight)
+        {
+            scale *= 1f + Mathf.Sin(Time.time * 11f) * 0.035f;
+        }
+
+        visual.localScale = baseVisualScale * scale;
     }
 
     private void OnDisable()

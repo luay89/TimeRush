@@ -11,7 +11,7 @@ public class ObstacleSpawner : MonoBehaviour
     [SerializeField] private GameObject obstaclePrefab;
     [SerializeField] private float fallbackInterval = 1.5f;
     [SerializeField] private float fallbackSpeed = 6f;
-    [SerializeField] private float spawnHeight = 12f;
+    [SerializeField] private float spawnHeight = 13.5f;
     [SerializeField] private bool ensureKillOnHit = true;
     [SerializeField] private float autoDestroyLifetime = 10f;
     [Header("Lane Spawning")]
@@ -725,7 +725,7 @@ public class ObstacleSpawner : MonoBehaviour
             marker = instance.AddComponent<ObstacleLaneMarker>();
         }
 
-        marker.Initialize(this, laneIndex);
+        marker.Initialize(this, laneIndex, spawnHeight);
     }
 
     private void NormalizeLanePositions()

@@ -163,7 +163,17 @@ public class ScoreUIBinder : MonoBehaviour
 
         if (statusLabel && feedbackTimer <= 0f)
         {
-            statusLabel.SetText(gc.IsGameOver ? "RUN ENDED" : "A/D  LANE  //  W/S  DEPTH");
+            if (gc.IsGameOver)
+            {
+                statusLabel.color = White;
+                statusLabel.SetText("RUN ENDED");
+            }
+            else
+            {
+                float opacity = gc.GetControlHintOpacity();
+                statusLabel.color = new Color(Cyan.r, Cyan.g, Cyan.b, opacity);
+                statusLabel.SetText(opacity > 0.02f ? "A/D  LANE  //  W/S  DEPTH" : string.Empty);
+            }
         }
     }
 
@@ -175,6 +185,7 @@ public class ScoreUIBinder : MonoBehaviour
         }
 
         feedbackTimer = 1.15f;
+        statusLabel.color = Cyan;
         statusLabel.SetText("NEAR MISS  //  +5");
     }
 
