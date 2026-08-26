@@ -26,7 +26,7 @@ public class ObstacleSpawner : MonoBehaviour
     [Header("Fairness")]
     [SerializeField] private bool enableFairnessRules = true;
     [SerializeField, Tooltip("Maximum time window where L+R spawns are treated as lock candidates.")]
-    private float lockWindowSeconds = 1.4f;
+    private float lockWindowSeconds = 1.8f;
     [SerializeField, Tooltip("Minimum reaction time between spawns that block different lanes.")]
     private float reactionTimeSeconds = 1f;
     [SerializeField, Tooltip("Log lane picks and fairness rejections.")]
