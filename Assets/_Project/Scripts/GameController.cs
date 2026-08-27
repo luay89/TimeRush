@@ -486,7 +486,7 @@ public class GameController : MonoBehaviour
         }
 
         difficultyDebugTimer = 0f;
-        difficultyDebugText.SetText("Spawn: {0:0.00}s\nSpeed: {1:0.0}\n{2}", GetSpawnInterval(), GetObstacleSpeed(), IsInTrainingWindow ? "LEARN" : "ARCADE");
+        difficultyDebugText.SetText($"Spawn: {GetSpawnInterval():0.00}s\nSpeed: {GetObstacleSpeed():0.0}\n{(IsInTrainingWindow ? "LEARN" : "ARCADE")}");
     }
 
     private void HandleSceneLoaded(Scene scene, LoadSceneMode mode)
