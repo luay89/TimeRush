@@ -1,0 +1,79 @@
+fileFormatVersion: 2
+guid: 01e2f806ac334bd9b60e401944ebbecf
+*** Add File: /home/ubuntu/timerush-unity/Assets/_Project/Scripts/Feedback/GameFeedbackSignals.cs
+using UnityEngine;
+
+/// <summary>
+/// Persistent access point for the typed feedback hub. It owns no gameplay rule or presentation effect.
+/// </summary>
+public sealed class GameFeedbackSignals : MonoBehaviour
+{
+    public static GameFeedbackSignals Instance { get; private set; }
+    public static bool HasInstance => Instance != null;
+    public FeedbackEventHub Events { get; } = new FeedbackEventHub();
+
+    private void Awake()
+    {
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
+
+        Instance = this;
+        DontDestroyOnLoad(gameObject);
+    }
+
+    private void OnDestroy()
+    {
+        if (Instance == this)
+        {
+            Instance = null;
+        }
+    }
+
+    public static void RaisePlayerLaneChanged(PlayerLaneChangedFeedback payload)
+    {
+        Instance?.Events.RaisePlayerLaneChanged(payload);
+    }
+
+    public static void RaisePlayerDepthChanged(PlayerDepthChangedFeedback payload)
+    {
+        Instance?.Events.RaisePlayerDepthChanged(payload);
+    }
+
+    public static void RaiseNearMiss(NearMissFeedback payload)
+    {
+        Instance?.Events.RaiseNearMiss(payload);
+    }
+
+    public static void RaiseObstacleCollision(ObstacleCollisionFeedback payload)
+    {
+        Instance?.Events.RaiseObstacleCollision(payload);
+    }
+
+    public static void RaiseGameOver()
+    {
+        Instance?.Events.RaiseGameOver();
+    }
+
+    public static void RaiseRunStarted()
+    {
+        Instance?.Events.RaiseRunStarted();
+    }
+
+    public static void RaiseRunPaused()
+    {
+        Instance?.Events.RaiseRunPaused();
+    }
+
+    public static void RaiseRunResumed()
+    {
+        Instance?.Events.RaiseRunResumed();
+    }
+
+    public static void RaisePaceMilestone(PaceMilestoneFeedback payload)
+    {
+        Instance?.Events.RaisePaceMilestone(payload);
+    }
+}

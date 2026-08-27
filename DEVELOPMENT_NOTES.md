@@ -33,3 +33,13 @@
 ## التحقق
 
 تم تشغيل `git diff --check` وفحص توازن الأقواس في ملفات C#، والتحقق من مراجع المشهد والـprefab والـGUIDات الأساسية. كما مر اختبار static لعقد الحركة والعوائق؛ وقت الاستجابة عند الحد الأقصى هو 1.059 ثانية مقابل 0.673 ثانية لتحرك اللاعب عبر كامل نطاق العمق، ويتحقق الاختبار من ثبات الصعوبة بعد 120 ثانية. لا يتوفر Unity Editor أو Unity CLI في بيئة التنفيذ الحالية، لذلك يلزم فتح المشروع في Unity 2022.3.62f3 لمراجعة Console وPlay Mode فعلياً قبل النشر.
+
+## Phase 3 — Game Feel / Juice & Feedback Foundation
+
+تستخدم Phase 3 قناة أحداث قوية النوع `GameFeedbackSignals` تملك `FeedbackEventHub` مستقلاً، ولا تستخدم أسماء أحداث نصية. تصدر طبقات اللعب إشارات lane وdepth بعد اعتماد حركة اللاعب، وإشارة Near Miss بعد تحقق الكاشف الحقيقي ومنح النقاط، وإشارة Collision قبل طلب Game Over، وإشارة Game Over من `GameController`. يحوّل `FeedbackStateRelay` انتقالات FSM إلى إشارات بدء الجولة والإيقاف والاستئناف، ويصدر `PaceFeedbackEmitter` milestone مرئياً فقط من Pace القائم من دون تغيير منحنى الصعوبة.
+
+طبقات الاستهلاك مستقلة عن Gameplay: `FeedbackVfxPresenter` يعيد استخدام pool صغير من ParticleSystems ينشأ مرة واحدة في Boot، و`FeedbackAudioPresenter` يوفر hooks صامتة اختيارية للـclips المستقبلية، و`CameraFeedbackController` يضيف shake قصيراً إلى `CameraFollow` من خلال offset إضافي فقط، بينما يعرض `ScreenFeedbackPresenter` flash خفيفاً في HUD عند Near Miss أو hit. يحتوي `FeedbackConfig` على كل قيم الـjuice القابلة للضبط، ويحفظ `FeedbackPreferences` خيارات camera shake وReduce Flashing والصوت محلياً من دون واجهة Settings جديدة في هذه المرحلة.
+
+لا تتغير Phase 3 سرعة اللاعب أو المسارات أو حدود العمق أو colliders أو FairnessValidator أو توقيت التوليد أو الصعوبة أو النقاط أو Flow. أزيلت قناة `FeedbackRaised` النصية القديمة من GameController وScoreUIBinder؛ يستقبل HUD الآن Near Miss typed ويحافظ على النص والمكافأة والمضاعف نفسيهما. تشترك كل طبقة مستهلكة في `OnEnable` وتلغي اشتراكها في `OnDisable`، وتُمسح المؤثرات المؤقتة عند Pause.
+
+أضيفت اختبارات محرر لـtyped feedback payloads وإلغاء الاشتراك، ووُسّع التدقيق الساكن لعقود الأحداث وغياب القناة النصية وغياب Instantiate لكل VFX event ومراجع الأصول. يحتاج Compile وNUnit وPlay Mode وConsole وProfiler في Unity 2022.3.62f3 إلى تحقق فعلي عند توفر المحرر؛ لا تسجل هذه المرحلة Runtime PASS من دون ذلك.

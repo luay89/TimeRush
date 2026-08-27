@@ -99,6 +99,7 @@ public class KillOnHit : MonoBehaviour
         nearMissState.MarkCollision();
 
         DebugMessage($"{channel}: using controller {controller.name}");
+        GameFeedbackSignals.RaiseObstacleCollision(new ObstacleCollisionFeedback(transform.position));
         DebugMessage($"{channel}: invoking TriggerGameOver");
         controller.TriggerGameOver(this);
     }

@@ -1,4 +1,3 @@
-using System;
 using TMPro;
 using UnityEngine;
 
@@ -16,6 +15,7 @@ public class ScoreUIBinder : MonoBehaviour
     [SerializeField] private TextMeshProUGUI statusLabel;
     [SerializeField] private TextMeshProUGUI paceLabel;
     [SerializeField] private TextMeshProUGUI flowLabel;
+    [SerializeField] private FeedbackConfig feedbackConfig;
 
     private int lastBest = int.MinValue;
     private float lastDisplayedTime = -1f;
@@ -39,7 +39,10 @@ public class ScoreUIBinder : MonoBehaviour
             return;
         }
 
-        gc.FeedbackRaised += HandleFeedback;
+        if (GameFeedbackSignals.HasInstance)
+        {
+            GameFeedbackSignals.Instance.Events.NearMissTriggered += HandleNearMiss;
+        }
 
         if (scoreLabel)
         {
@@ -55,10 +58,9 @@ public class ScoreUIBinder : MonoBehaviour
 
     private void OnDestroy()
     {
-        var gc = GameController.Instance;
-        if (gc)
+        if (GameFeedbackSignals.HasInstance)
         {
-            gc.FeedbackRaised -= HandleFeedback;
+            GameFeedbackSignals.Instance.Events.NearMissTriggered -= HandleNearMiss;
         }
     }
 
@@ -200,21 +202,18 @@ public class ScoreUIBinder : MonoBehaviour
         }
     }
 
-    private void HandleFeedback(string reason)
+    private void HandleNearMiss(NearMissFeedback feedback)
     {
-        if (!statusLabel || !string.Equals(reason, "NearMiss", StringComparison.OrdinalIgnoreCase))
+        if (!statusLabel)
         {
             return;
         }
 
-        feedbackTimer = 1.15f;
+        feedbackTimer = feedbackConfig ? feedbackConfig.nearMissStatusDuration : 1.15f;
         statusLabel.color = Cyan;
-        var gc = GameController.Instance;
-        int award = gc ? gc.LastNearMissAward : 5;
-        int multiplier = gc ? gc.FlowMultiplier : 1;
-        statusLabel.SetText(multiplier > 1
-            ? string.Format("NEAR MISS  //  +{0}  x{1}", award, multiplier)
-            : string.Format("NEAR MISS  //  +{0}", award));
+        statusLabel.SetText(feedback.FlowMultiplier > 1
+            ? string.Format("NEAR MISS  //  +{0}  x{1}", feedback.Award, feedback.FlowMultiplier)
+            : string.Format("NEAR MISS  //  +{0}", feedback.Award));
     }
 
     private void RefreshBest(GameController gc)

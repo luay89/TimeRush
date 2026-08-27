@@ -36,6 +36,7 @@ public class PlayerController : MonoBehaviour
 
     public int CurrentLane => currentLane;
     public float CurrentTrackDepth => transform.position.z;
+    public float TargetTrackDepth => targetDepthZ;
     public float MinimumSafeDepth => trackCenterZ - safeDepthRange;
     public float MaximumSafeDepth => trackCenterZ + safeDepthRange;
     public float LaneChangeProgress { get; private set; }

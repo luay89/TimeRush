@@ -64,6 +64,7 @@ public class NearMissDetector : MonoBehaviour
         }
 
         controller.RegisterNearMiss(bonusPoints);
+        GameFeedbackSignals.RaiseNearMiss(new NearMissFeedback(other.ClosestPoint(transform.position), controller.LastNearMissAward, controller.FlowMultiplier));
     }
 
     private bool IsDirectCollision(Collider other)

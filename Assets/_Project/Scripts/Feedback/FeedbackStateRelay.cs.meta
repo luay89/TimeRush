@@ -1,0 +1,56 @@
+fileFormatVersion: 2
+guid: 91c7431709f745ccb50da16f636be500
+*** Add File: /home/ubuntu/timerush-unity/Assets/_Project/Scripts/Feedback/PaceFeedbackEmitter.cs
+using UnityEngine;
+
+/// <summary>
+/// Emits a compact pace milestone while a run is active, leaving difficulty calculation untouched.
+/// </summary>
+public sealed class PaceFeedbackEmitter : MonoBehaviour
+{
+    [SerializeField] private FeedbackConfig feedbackConfig;
+
+    private float nextMilestone = 1f;
+
+    private void OnEnable()
+    {
+        if (GameStateMachine.HasInstance)
+        {
+            GameStateMachine.Instance.StateChanged += HandleStateChanged;
+        }
+    }
+
+    private void OnDisable()
+    {
+        if (GameStateMachine.HasInstance)
+        {
+            GameStateMachine.Instance.StateChanged -= HandleStateChanged;
+        }
+    }
+
+    private void Update()
+    {
+        if (!GameStateMachine.IsGameplayInputAllowed || !GameController.Instance || !feedbackConfig)
+        {
+            return;
+        }
+
+        float pace = GameController.Instance.GetPaceMultiplier();
+
+        if (pace < nextMilestone)
+        {
+            return;
+        }
+
+        GameFeedbackSignals.RaisePaceMilestone(new PaceMilestoneFeedback(pace));
+        nextMilestone += feedbackConfig.paceMilestoneStep;
+    }
+
+    private void HandleStateChanged(GameStateKind previous, GameStateKind current)
+    {
+        if (current == GameStateKind.Playing && previous == GameStateKind.Loading)
+        {
+            nextMilestone = 1f + feedbackConfig.paceMilestoneStep;
+        }
+    }
+}

@@ -1,0 +1,63 @@
+using UnityEngine;
+
+/// <summary>
+/// Owns only presentation feedback settings; gameplay balance remains in GameBalanceConfig.
+/// </summary>
+[CreateAssetMenu(fileName = "FeedbackConfig", menuName = "TimeRush/Feedback Config")]
+public sealed class FeedbackConfig : ScriptableObject
+{
+    [Header("Accessibility")]
+    public bool cameraShakeEnabledByDefault = true;
+    public bool reduceFlashingByDefault;
+    public bool audioEnabledByDefault = true;
+
+    [Header("Camera")]
+    [Range(0f, 0.35f)] public float nearMissShakeStrength = 0.06f;
+    [Range(0.02f, 0.5f)] public float nearMissShakeDuration = 0.10f;
+    [Range(0f, 0.5f)] public float collisionShakeStrength = 0.16f;
+    [Range(0.02f, 0.75f)] public float collisionShakeDuration = 0.20f;
+
+    [Header("Screen")]
+    [Range(0f, 0.35f)] public float nearMissFlashOpacity = 0.08f;
+    [Range(0f, 0.6f)] public float collisionFlashOpacity = 0.22f;
+    [Range(0.02f, 0.75f)] public float flashDuration = 0.12f;
+    [Range(0.05f, 2f)] public float nearMissStatusDuration = 1.15f;
+    [Range(0.05f, 1f)] public float depthFeedbackThreshold = 0.2f;
+
+    [Header("VFX")]
+    [Range(1, 6)] public int pooledPulseCount = 3;
+    [Range(1, 64)] public int nearMissParticleCount = 10;
+    [Range(1, 96)] public int collisionParticleCount = 22;
+    [Range(0.1f, 1f)] public float nearMissParticleLifetime = 0.28f;
+    [Range(0.1f, 1.5f)] public float collisionParticleLifetime = 0.48f;
+    public Color nearMissColor = new Color(0.12f, 0.95f, 1f, 1f);
+    public Color collisionColor = new Color(1f, 0.26f, 0.10f, 1f);
+
+    [Header("Audio Hooks")]
+    [Range(0f, 1f)] public float laneVolume = 0.35f;
+    [Range(0f, 1f)] public float depthVolume = 0.28f;
+    [Range(0f, 1f)] public float nearMissVolume = 0.60f;
+    [Range(0f, 1f)] public float collisionVolume = 0.72f;
+    [Range(0f, 1f)] public float runVolume = 0.42f;
+    [Range(0f, 1f)] public float pauseVolume = 0.32f;
+    [Range(0f, 1f)] public float movementAudioCooldown = 0.06f;
+    public AudioClip runStartClip;
+    public AudioClip laneChangeClip;
+    public AudioClip depthMoveClip;
+    public AudioClip nearMissClip;
+    public AudioClip collisionClip;
+    public AudioClip gameOverClip;
+    public AudioClip pauseClip;
+    public AudioClip resumeClip;
+    public AudioClip paceMilestoneClip;
+
+    [Header("Pace")]
+    [Range(0.05f, 1f)] public float paceMilestoneStep = 0.25f;
+
+    private void OnValidate()
+    {
+        pooledPulseCount = Mathf.Clamp(pooledPulseCount, 1, 6);
+        movementAudioCooldown = Mathf.Max(0f, movementAudioCooldown);
+        paceMilestoneStep = Mathf.Max(0.05f, paceMilestoneStep);
+    }
+}

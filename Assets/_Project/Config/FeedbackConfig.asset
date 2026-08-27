@@ -1,0 +1,50 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c049f7e6d9494c1db26c0dcc700b2eaf, type: 3}
+  m_Name: FeedbackConfig
+  m_EditorClassIdentifier:
+  cameraShakeEnabledByDefault: 1
+  reduceFlashingByDefault: 0
+  audioEnabledByDefault: 1
+  nearMissShakeStrength: 0.06
+  nearMissShakeDuration: 0.1
+  collisionShakeStrength: 0.16
+  collisionShakeDuration: 0.2
+  nearMissFlashOpacity: 0.08
+  collisionFlashOpacity: 0.22
+  flashDuration: 0.12
+  nearMissStatusDuration: 1.15
+  depthFeedbackThreshold: 0.2
+  pooledPulseCount: 3
+  nearMissParticleCount: 10
+  collisionParticleCount: 22
+  nearMissParticleLifetime: 0.28
+  collisionParticleLifetime: 0.48
+  nearMissColor: {r: 0.12, g: 0.95, b: 1, a: 1}
+  collisionColor: {r: 1, g: 0.26, b: 0.1, a: 1}
+  laneVolume: 0.35
+  depthVolume: 0.28
+  nearMissVolume: 0.6
+  collisionVolume: 0.72
+  runVolume: 0.42
+  pauseVolume: 0.32
+  movementAudioCooldown: 0.06
+  runStartClip: {fileID: 0}
+  laneChangeClip: {fileID: 0}
+  depthMoveClip: {fileID: 0}
+  nearMissClip: {fileID: 0}
+  collisionClip: {fileID: 0}
+  gameOverClip: {fileID: 0}
+  pauseClip: {fileID: 0}
+  resumeClip: {fileID: 0}
+  paceMilestoneClip: {fileID: 0}
+  paceMilestoneStep: 0.25

@@ -134,6 +134,12 @@ GameObject:
   - component: {fileID: 136290812}
   - component: {fileID: 136290813}
   - component: {fileID: 136290814}
+  - component: {fileID: 136290815}
+  - component: {fileID: 136290816}
+  - component: {fileID: 136290817}
+  - component: {fileID: 136290818}
+  - component: {fileID: 136290819}
+  - component: {fileID: 136290820}
   m_Layer: 0
   m_Name: BootLoader
   m_TagString: Untagged
@@ -192,6 +198,131 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ef4fbd4e2d864dd69c12e018ae13bc44, type: 3}
   m_Name:
   m_EditorClassIdentifier:
+--- !u!82 &136290815
+AudioSource:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 136290810}
+  m_Enabled: 1
+  serializedVersion: 4
+  OutputAudioMixerGroup: {fileID: 0}
+  m_audioClip: {fileID: 0}
+  m_PlayOnAwake: 0
+  m_Volume: 1
+  m_Pitch: 1
+  Loop: 0
+  Mute: 0
+  Spatialize: 0
+  SpatializePostEffects: 0
+  Priority: 128
+  DopplerLevel: 1
+  MinDistance: 1
+  MaxDistance: 500
+  Pan2D: 0
+  rolloffMode: 0
+  BypassEffects: 0
+  BypassListenerEffects: 0
+  BypassReverbZones: 0
+  rolloffCustomCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  panLevelCustomCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  spatialBlend: 0
+  reverbZoneMix: 1
+  bypassEffects: 0
+  bypassListenerEffects: 0
+  bypassReverbZones: 0
+--- !u!114 &136290816
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 136290810}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 28321d83f4d148dd906f0520e4287879, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+--- !u!114 &136290817
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 136290810}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 91c7431709f745ccb50da16f636be500, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+--- !u!114 &136290818
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 136290810}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1eeaa6dc513d46a5859ce4a80b0037a6, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  feedbackConfig: {fileID: 11400000, guid: 26f572c822a14bf9ba183f47d0cf311d, type: 2}
+--- !u!114 &136290819
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 136290810}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d1af281fb2c440ee82327bc33332b8e7, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  feedbackConfig: {fileID: 11400000, guid: 26f572c822a14bf9ba183f47d0cf311d, type: 2}
+--- !u!114 &136290820
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 136290810}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 57e2dd82a05d4852b376f86b26161914, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  feedbackConfig: {fileID: 11400000, guid: 26f572c822a14bf9ba183f47d0cf311d, type: 2}
 --- !u!1 &721950800
 GameObject:
   m_ObjectHideFlags: 0

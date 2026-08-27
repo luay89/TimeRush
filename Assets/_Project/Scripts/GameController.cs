@@ -39,7 +39,6 @@ public class GameController : MonoBehaviour
 
     public int CurrentScore { get; private set; }
     public int BestScore { get; private set; }
-    public event System.Action<string> FeedbackRaised;
     public float AliveTime => aliveTime;
     public bool IsGameOver => _gameOver;
     public bool HasContinuedThisRun => hasContinuedThisRun;
@@ -298,6 +297,7 @@ public class GameController : MonoBehaviour
 
         _gameOver = true;
         resultsSceneLoadRequested = true;
+        GameFeedbackSignals.RaiseGameOver();
 
         if (CurrentScore > BestScore)
         {
@@ -337,7 +337,7 @@ public class GameController : MonoBehaviour
         UpdateScoreText();
     }
 
-    public void AddScore(int amount, string reason = null)
+    public void AddScore(int amount)
     {
         if (_gameOver || amount <= 0)
         {
@@ -352,11 +352,6 @@ public class GameController : MonoBehaviour
         }
 
         UpdateScoreText();
-
-        if (!string.IsNullOrEmpty(reason))
-        {
-            FeedbackRaised?.Invoke(reason);
-        }
     }
 
     /// <summary>
@@ -373,7 +368,7 @@ public class GameController : MonoBehaviour
         NearMissChain = Mathf.Min(NearMissChain + 1, MaxFlowChain);
         flowTimer = Mathf.Max(0.1f, flowRetentionSeconds);
         LastNearMissAward = baseBonus * FlowMultiplier;
-        AddScore(LastNearMissAward, "NearMiss");
+        AddScore(LastNearMissAward);
     }
 
     public float GetSpawnInterval()

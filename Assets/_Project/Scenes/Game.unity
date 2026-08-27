@@ -291,6 +291,7 @@ GameObject:
   - component: {fileID: 751755597}
   - component: {fileID: 751755596}
   - component: {fileID: 751755599}
+  - component: {fileID: 751755600}
   m_Layer: 0
   m_Name: Main Camera
   m_TagString: MainCamera
@@ -388,6 +389,19 @@ MonoBehaviour:
   offset: {x: 0, y: 8.5, z: -18}
   lookAtOffset: {x: 0, y: 2.5, z: 3.5}
   followSpeed: 8
+--- !u!114 &751755600
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 751755595}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 19faba5cf43f495586dc50be67fa65ae, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  feedbackConfig: {fileID: 11400000, guid: 26f572c822a14bf9ba183f47d0cf311d, type: 2}
 --- !u!1 &1097900766
 GameObject:
   m_ObjectHideFlags: 0
@@ -403,6 +417,7 @@ GameObject:
   - component: {fileID: 1097900767}
   - component: {fileID: 1097900773}
   - component: {fileID: 1097900774}
+  - component: {fileID: 1097900775}
   m_Layer: 0
   m_Name: player
   m_TagString: Player
@@ -440,6 +455,19 @@ MonoBehaviour:
   playerController: {fileID: 1097900767}
   gameBalanceConfig: {fileID: 11400000, guid: 16b256e0209a49e19760a7ba6c64b46a, type: 2}
   allowTouchSwipe: 1
+--- !u!114 &1097900775
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1097900766}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b1256ba9255b41e7a8d0a31692ead8b5, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  feedbackConfig: {fileID: 11400000, guid: 26f572c822a14bf9ba183f47d0cf311d, type: 2}
 --- !u!65 &1097900768
 BoxCollider:
   m_ObjectHideFlags: 0

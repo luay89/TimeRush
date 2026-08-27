@@ -1,0 +1,51 @@
+fileFormatVersion: 2
+guid: 6eba2113507d4b2f8dc6d502f6900ef6
+*** Add File: /home/ubuntu/timerush-unity/Assets/_Project/Scripts/Feedback/FeedbackStateRelay.cs
+using UnityEngine;
+
+/// <summary>
+/// Converts only FSM lifecycle changes into feedback signals; it never changes FSM state itself.
+/// </summary>
+public sealed class FeedbackStateRelay : MonoBehaviour
+{
+    private void OnEnable()
+    {
+        if (GameStateMachine.HasInstance)
+        {
+            GameStateMachine.Instance.StateChanged += HandleStateChanged;
+        }
+    }
+
+    private void OnDisable()
+    {
+        if (GameStateMachine.HasInstance)
+        {
+            GameStateMachine.Instance.StateChanged -= HandleStateChanged;
+        }
+    }
+
+    private static void HandleStateChanged(GameStateKind previous, GameStateKind current)
+    {
+        if (current == GameStateKind.Paused)
+        {
+            GameFeedbackSignals.RaiseRunPaused();
+            return;
+        }
+
+        if (current != GameStateKind.Playing)
+        {
+            return;
+        }
+
+        if (previous == GameStateKind.Paused)
+        {
+            GameFeedbackSignals.RaiseRunResumed();
+            return;
+        }
+
+        if (previous == GameStateKind.Loading)
+        {
+            GameFeedbackSignals.RaiseRunStarted();
+        }
+    }
+}
