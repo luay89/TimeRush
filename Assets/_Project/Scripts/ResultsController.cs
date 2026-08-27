@@ -13,6 +13,7 @@ public class ResultsController : MonoBehaviour
     private const string ContinueButtonName = "ContinueButton";
     private const string FinalScoreLabelName = "FinalScoreText";
     private const string BestScoreLabelName = "BestScoreText";
+    private const string ResultStatusLabelName = "ResultStatusText";
     private const string GameOverTitleName = "GameOverTitle";
     private const string BestScoreKey = "BEST_SCORE";
 
@@ -25,6 +26,7 @@ public class ResultsController : MonoBehaviour
     [SerializeField] private Button menuButton;
     [SerializeField] private TextMeshProUGUI finalScoreText;
     [SerializeField] private TextMeshProUGUI bestScoreText;
+    [SerializeField] private TextMeshProUGUI resultStatusText;
     [SerializeField] private TextMeshProUGUI gameOverTitle;
 
     [Header("Testing (Optional)")]
@@ -37,6 +39,7 @@ public class ResultsController : MonoBehaviour
 
     private Canvas cachedCanvas;
     private bool continueRequestInProgress;
+    private bool navigationRequestInProgress;
     private bool continueAvailable;
 
     private bool missingFinalScoreLabelLogged;
@@ -71,11 +74,19 @@ public class ResultsController : MonoBehaviour
 
     public void RestartGame()
     {
+        if (!TryBeginNavigationRequest())
+        {
+            return;
+        }
+
         Time.timeScale = 1f;
 
         if (GameStateMachine.HasInstance)
         {
-            GameStateMachine.Instance.RestartFromResults();
+            if (!GameStateMachine.Instance.RestartFromResults())
+            {
+                navigationRequestInProgress = false;
+            }
             return;
         }
 
@@ -84,11 +95,19 @@ public class ResultsController : MonoBehaviour
 
     public void GoToMenu()
     {
+        if (!TryBeginNavigationRequest())
+        {
+            return;
+        }
+
         Time.timeScale = 1f;
 
         if (GameStateMachine.HasInstance)
         {
-            GameStateMachine.Instance.ReturnToMenu();
+            if (!GameStateMachine.Instance.ReturnToMenu())
+            {
+                navigationRequestInProgress = false;
+            }
             return;
         }
 
@@ -163,6 +182,7 @@ public class ResultsController : MonoBehaviour
             DisableCanvasBackgroundRaycast(canvas);
             AttemptButtonLookup(canvas.transform);
             AttemptScoreLabelLookup(canvas.transform);
+            EnsureResultControls(canvas.transform);
             ConfigureButtonLayout();
         }
 
@@ -173,6 +193,7 @@ public class ResultsController : MonoBehaviour
         }
 
         cachedCanvas = canvas;
+        EnsureResultDetails(canvas.transform);
         DisableAllTextRaycasts(canvas.transform);
         EnsureEventSystem();
         CleanupDuplicateGameOverTitles(canvas.transform);
@@ -223,6 +244,13 @@ public class ResultsController : MonoBehaviour
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
         canvas.pixelPerfect = false;
         canvas.sortingOrder = 0;
+
+        // Legacy scenes may retain a zero-scale Canvas. Presentation should recover safely,
+        // rather than leave Results invisible after a valid Game Over transition.
+        if (canvas.transform is RectTransform rectTransform && rectTransform.localScale.sqrMagnitude < 0.0001f)
+        {
+            rectTransform.localScale = Vector3.one;
+        }
     }
 
     private void ConfigureCanvasScaler(CanvasScaler scaler)
@@ -649,6 +677,11 @@ public class ResultsController : MonoBehaviour
             bestScoreText = FindLabel(canvasTransform, BestScoreLabelName);
         }
 
+        if (!resultStatusText)
+        {
+            resultStatusText = FindLabel(canvasTransform, ResultStatusLabelName);
+        }
+
         if (!gameOverTitle)
         {
             var foundTitle = FindLabel(canvasTransform, GameOverTitleName);
@@ -673,6 +706,101 @@ public class ResultsController : MonoBehaviour
 
         CleanupDuplicateGameOverTitles(canvasTransform);
         CleanupExternalGameOverTitles();
+    }
+
+    private void EnsureResultDetails(Transform canvasTransform)
+    {
+        if (!canvasTransform)
+        {
+            return;
+        }
+
+        AttemptScoreLabelLookup(canvasTransform);
+        resultStatusText = resultStatusText ? resultStatusText : CreateResultStatusLabel(canvasTransform);
+        ConfigureResultStatusLabel(resultStatusText);
+    }
+
+    private void EnsureResultControls(Transform canvasTransform)
+    {
+        if (!canvasTransform)
+        {
+            return;
+        }
+
+        var contentRoot = canvasTransform.Find("ResultsContent") as RectTransform;
+        if (!contentRoot)
+        {
+            contentRoot = CreateContentRoot(canvasTransform);
+            contentRoot.anchoredPosition = new Vector2(0f, -96f);
+        }
+
+        var scorePanel = contentRoot.Find("ScorePanel");
+        if (!scorePanel)
+        {
+            scorePanel = CreateScorePanel(contentRoot);
+        }
+
+        if (!finalScoreText)
+        {
+            finalScoreText = CreateLabel(scorePanel, FinalScoreLabelName, Vector2.zero, 60f, "Score: 0", true);
+        }
+
+        if (!bestScoreText)
+        {
+            bestScoreText = CreateLabel(scorePanel, BestScoreLabelName, Vector2.zero, 50f, "Best: 0", true);
+        }
+
+        var buttonPanel = contentRoot.Find("ButtonPanel");
+        if (!buttonPanel)
+        {
+            buttonPanel = CreateButtonPanel(contentRoot);
+        }
+
+        if (!continueButton)
+        {
+            continueButton = CreateButton(buttonPanel, ContinueButtonName, "Continue");
+        }
+
+        if (!restartButton)
+        {
+            restartButton = CreateButton(buttonPanel, RestartButtonName, "Restart");
+        }
+
+        if (!menuButton)
+        {
+            menuButton = CreateButton(buttonPanel, MenuButtonName, "Menu");
+        }
+    }
+
+    private TextMeshProUGUI CreateResultStatusLabel(Transform parent)
+    {
+        var labelObject = new GameObject(ResultStatusLabelName, typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
+        labelObject.transform.SetParent(parent, false);
+        var label = labelObject.GetComponent<TextMeshProUGUI>();
+        label.raycastTarget = false;
+        return label;
+    }
+
+    private static void ConfigureResultStatusLabel(TextMeshProUGUI label)
+    {
+        if (!label)
+        {
+            return;
+        }
+
+        label.alignment = TextAlignmentOptions.Center;
+        label.fontSize = 30f;
+        label.fontWeight = FontWeight.Bold;
+        label.color = new Color(0.62f, 0.82f, 1f, 1f);
+        label.characterSpacing = 1.5f;
+        label.enableWordWrapping = false;
+        label.raycastTarget = false;
+
+        var rect = label.rectTransform;
+        rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
+        rect.pivot = new Vector2(0.5f, 0.5f);
+        rect.anchoredPosition = new Vector2(0f, -105f);
+        rect.sizeDelta = new Vector2(900f, 72f);
     }
 
     private void CleanupDuplicateGameOverTitles(Transform root)
@@ -750,6 +878,11 @@ public class ResultsController : MonoBehaviour
         }
 
         int bestScore = Mathf.Max(storedBest, snapshotBest, finalScore);
+        ResultsPresentation.DisplayData display = ResultsPresentation.Build(
+            finalScore,
+            bestScore,
+            ScoreSnapshot.HasValue && ScoreSnapshot.LastRunSetNewBest,
+            ScoreSnapshot.LastLossReason);
 
         // ✅ حفظ مضمون
         if (bestScore != storedBest)
@@ -759,7 +892,7 @@ public class ResultsController : MonoBehaviour
         }
 
         if (finalScoreText)
-            finalScoreText.text = $"Score: {finalScore}";
+            finalScoreText.text = display.FinalScoreText;
         else if (!missingFinalScoreLabelLogged)
         {
             Debug.LogError("ResultsController: FinalScoreText missing.", this);
@@ -767,12 +900,28 @@ public class ResultsController : MonoBehaviour
         }
 
         if (bestScoreText)
-            bestScoreText.text = $"Best: {bestScore}";
+            bestScoreText.text = display.BestScoreText;
         else if (!missingBestScoreLabelLogged)
         {
             Debug.LogError("ResultsController: BestScoreText missing.", this);
             missingBestScoreLabelLogged = true;
         }
+
+        if (resultStatusText)
+        {
+            resultStatusText.text = display.StatusText;
+        }
+    }
+
+    private bool TryBeginNavigationRequest()
+    {
+        if (navigationRequestInProgress)
+        {
+            return false;
+        }
+
+        navigationRequestInProgress = true;
+        return true;
     }
 
     private void RefreshContinueState()

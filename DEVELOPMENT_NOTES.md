@@ -43,3 +43,13 @@
 لا تتغير Phase 3 سرعة اللاعب أو المسارات أو حدود العمق أو colliders أو FairnessValidator أو توقيت التوليد أو الصعوبة أو النقاط أو Flow. أزيلت قناة `FeedbackRaised` النصية القديمة من GameController وScoreUIBinder؛ يستقبل HUD الآن Near Miss typed ويحافظ على النص والمكافأة والمضاعف نفسيهما. تشترك كل طبقة مستهلكة في `OnEnable` وتلغي اشتراكها في `OnDisable`، وتُمسح المؤثرات المؤقتة عند Pause.
 
 أضيفت اختبارات محرر لـtyped feedback payloads وإلغاء الاشتراك، ووُسّع التدقيق الساكن لعقود الأحداث وغياب القناة النصية وغياب Instantiate لكل VFX event ومراجع الأصول. يحتاج Compile وNUnit وPlay Mode وConsole وProfiler في Unity 2022.3.62f3 إلى تحقق فعلي عند توفر المحرر؛ لا تسجل هذه المرحلة Runtime PASS من دون ذلك.
+
+## Phase 4 — HUD, Menus & Results UX Foundation
+
+أضيف `SafeAreaFitter` كطبقة عرض صغيرة ومعاد استخدامها فقط على جذر HUD (UGUI) وجذر MenuHub (UI Toolkit) وCanvas النتائج. يحوّل Safe Area إلى anchors معيارية للـUGUI ويضيف padding محسوباً للـUI Toolkit، مع إعادة الحساب فقط عند تغير أبعاد الشاشة أو منطقة الأمان. لا يملك هذا المكوّن أي منطق لعب أو مشهد أو انتقالات، ولا يغيّر المسارات أو الكاميرا أو colliders أو المقاييس الفيزيائية.
+
+يتوقف `ScoreUIBinder` عن تحديث العرض خارج حالة `Playing` التي يملكها FSM، فيمنع تحديث HUD أثناء Pause أو الانتقال. يعرض MenuHub أفضل نتيجة محلية ضمن سطر الهوية، ويوضح تحكم lane والعمق، ويمنع الضغط السريع المكرر على START؛ يبقى انتقال بدء الجولة معتمداً على `GameStateMachine.StartRunFromMenu()` عند وجود FSM، مع fallback محرر المشروع السابق فقط عند عدم وجوده.
+
+تستعيد Results واجهة قابلة للاستخدام إذا احتوى المشهد القديم على Canvas بمقياس صفري: يعاد مقياس Canvas إلى واحد ويُنشأ فقط ما ينقص من لوحة Score وأزرار Continue/Restart/Menu، من دون حذف الحقول serialized القديمة أو تبديل آلية Continue. تعرض النتائج Score وBest وحالة `NEW BEST` من flag typed يلتقط قبل حفظ Best، ولا تعرض سبب خسارة محدداً إلا عندما يمرر `GameController` سبب `ObstacleCollision` المؤكد من `KillOnHit`؛ في جميع الحالات غير المصنفة تستخدم العبارة العامة `RUN ENDED`. تستمر Restart وMenu في تفويض الانتقال إلى FSM، مع guard يمنع طلبات اللمس المتكررة.
+
+أضيفت اختبارات Edit Mode لـتحويل Safe Area وللقرارات النصية في Results، بما في ذلك عدم اختراع سبب خسارة. نجحت تدقيقات Phase 1–4 الساكنة، وتدقيق التواقيع C#، و`git diff --check`، وتدقيق GUIDات ومراجع scene/prefab، والتحقق من عدم تغيير `GameBalanceConfig` أو `TrackLayoutConfig`. لم يتوفر Unity Editor أو Unity CLI في هذه البيئة عند إعادة الفحص، لذا بقي Compile وNUnit وPlay Mode وConsole وProfiler **محجوبة** ويجب تنفيذها لاحقاً في Unity 2022.3.62f3 قبل اعتبار المرحلة Runtime Verified.

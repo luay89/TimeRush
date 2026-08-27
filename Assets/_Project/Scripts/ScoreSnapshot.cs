@@ -1,3 +1,9 @@
+public enum RunLossReason
+{
+    None = 0,
+    ObstacleCollision = 1,
+}
+
 public static class ScoreSnapshot
 {
     public readonly struct ContinuePayload
@@ -16,17 +22,27 @@ public static class ScoreSnapshot
     public static int LastBest { get; private set; }
     public static bool LastRunHasContinued { get; private set; }
     public static bool LastRunCameFromGame { get; private set; }
+    public static RunLossReason LastLossReason { get; private set; }
+    public static bool LastRunSetNewBest { get; private set; }
     public static bool HasValue { get; private set; }
     public static bool ContinueRequested { get; private set; }
 
     public static bool CanContinue => HasValue && !LastRunHasContinued && LastRunCameFromGame && !ContinueRequested;
 
-    public static void Set(int score, int best, bool hasContinuedThisRun, bool cameFromGameScene)
+    public static void Set(
+        int score,
+        int best,
+        bool hasContinuedThisRun,
+        bool cameFromGameScene,
+        RunLossReason lossReason = RunLossReason.None,
+        bool setNewBest = false)
     {
         LastScore = score;
         LastBest = best;
         LastRunHasContinued = hasContinuedThisRun;
         LastRunCameFromGame = cameFromGameScene;
+        LastLossReason = lossReason;
+        LastRunSetNewBest = setNewBest;
         HasValue = true;
         ContinueRequested = false;
     }
@@ -67,6 +83,8 @@ public static class ScoreSnapshot
         LastBest = 0;
         LastRunHasContinued = false;
         LastRunCameFromGame = false;
+        LastLossReason = RunLossReason.None;
+        LastRunSetNewBest = false;
         ContinueRequested = false;
     }
 }

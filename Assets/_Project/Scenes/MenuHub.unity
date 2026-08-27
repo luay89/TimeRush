@@ -319,6 +319,7 @@ GameObject:
   - component: {fileID: 1915162102}
   - component: {fileID: 1915162104}
   - component: {fileID: 1915162103}
+  - component: {fileID: 1915162105}
   m_Layer: 0
   m_Name: 'MenuHubRoot '
   m_TagString: Untagged
@@ -370,6 +371,21 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   gameSceneName: Game
+--- !u!114 &1915162105
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1915162101}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7f55dfbfdaf94ca6bc1a4f5d8db3f08c, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  targetRectTransform: {fileID: 0}
+  uiToolkitHorizontalPadding: 32
+  uiToolkitVerticalPadding: 28
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

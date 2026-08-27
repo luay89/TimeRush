@@ -9,6 +9,7 @@ using UnityEngine.UIElements;
 public class MenuHubUI : MonoBehaviour
 {
     [SerializeField] private string gameSceneName = "Game";
+    private const string BestScoreKey = "BEST_SCORE";
 
     private static readonly Color Ink = new Color(0.015f, 0.025f, 0.075f, 1f);
     private static readonly Color Panel = new Color(0.035f, 0.055f, 0.12f, 0.96f);
@@ -16,6 +17,7 @@ public class MenuHubUI : MonoBehaviour
     private static readonly Color Orange = new Color(1f, 0.36f, 0.12f, 1f);
     private static readonly Color Violet = new Color(0.56f, 0.34f, 1f, 1f);
     private static readonly Color Muted = new Color(0.62f, 0.7f, 0.86f, 1f);
+    private bool startRequestInProgress;
 
     private void Awake()
     {
@@ -81,7 +83,7 @@ public class MenuHubUI : MonoBehaviour
         mark.style.letterSpacing = 4f;
         header.Add(mark);
 
-        var meta = new Label("ENDLESS DODGE // BUILD 01");
+        var meta = new Label($"BEST  {PlayerPrefs.GetInt(BestScoreKey, 0)}   //   ENDLESS DODGE");
         meta.style.color = Muted;
         meta.style.fontSize = 14f;
         meta.style.unityTextAlign = TextAnchor.MiddleRight;
@@ -108,7 +110,7 @@ public class MenuHubUI : MonoBehaviour
         title.style.marginTop = 8f;
         titleBlock.Add(title);
 
-        var subtitle = new Label("Three lanes. One clean line through the chaos.");
+        var subtitle = new Label("Three lanes. Read the gap. Shift depth when the line closes.");
         subtitle.style.color = Muted;
         subtitle.style.fontSize = 23f;
         subtitle.style.marginTop = 18f;
@@ -140,7 +142,7 @@ public class MenuHubUI : MonoBehaviour
         startButton.RegisterCallback<PointerLeaveEvent>(_ => startButton.style.backgroundColor = Orange);
         actionRow.Add(startButton);
 
-        var hint = new Label("A / D  or  ← / →\nSwipe left or right on touch");
+        var hint = new Label("A / D  or  ← / →  //  lane\nW / S  or  ↑ / ↓  //  depth\nSwipe left or right on touch");
         hint.style.color = Muted;
         hint.style.fontSize = 16f;
         hint.style.unityTextAlign = TextAnchor.MiddleRight;
@@ -157,12 +159,22 @@ public class MenuHubUI : MonoBehaviour
 
     private void StartRun()
     {
-        if (GameStateMachine.HasInstance)
+        if (startRequestInProgress)
         {
-            GameStateMachine.Instance.StartRunFromMenu();
             return;
         }
 
+        if (GameStateMachine.HasInstance)
+        {
+            startRequestInProgress = true;
+            if (!GameStateMachine.Instance.StartRunFromMenu())
+            {
+                startRequestInProgress = false;
+            }
+            return;
+        }
+
+        startRequestInProgress = true;
         SceneManager.LoadScene(gameSceneName);
     }
 }

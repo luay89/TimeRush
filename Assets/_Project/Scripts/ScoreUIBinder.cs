@@ -66,6 +66,11 @@ public class ScoreUIBinder : MonoBehaviour
 
     private void Update()
     {
+        if (GameStateMachine.HasInstance && GameStateMachine.Instance.CurrentState != GameStateKind.Playing)
+        {
+            return;
+        }
+
         if (feedbackTimer > 0f)
         {
             feedbackTimer = Mathf.Max(0f, feedbackTimer - Time.deltaTime);

@@ -299,7 +299,10 @@ public class GameController : MonoBehaviour
         resultsSceneLoadRequested = true;
         GameFeedbackSignals.RaiseGameOver();
 
-        if (CurrentScore > BestScore)
+        // BestScore is updated live for HUD feedback; the persisted value preserves whether this run beat its starting record.
+        int persistedBestScore = PlayerPrefs.GetInt(BestScoreKey, 0);
+        bool setNewBest = CurrentScore > persistedBestScore;
+        if (setNewBest)
         {
             BestScore = CurrentScore;
             PlayerPrefs.SetInt(BestScoreKey, BestScore);
@@ -307,7 +310,8 @@ public class GameController : MonoBehaviour
 
         PlayerPrefs.Save();
         // Persist final state so the Results scene can decide whether continue is still allowed.
-        ScoreSnapshot.Set(CurrentScore, BestScore, hasContinuedThisRun, true);
+        RunLossReason lossReason = source is KillOnHit ? RunLossReason.ObstacleCollision : RunLossReason.None;
+        ScoreSnapshot.Set(CurrentScore, BestScore, hasContinuedThisRun, true, lossReason, setNewBest);
 
         Debug.Log($"GameOver triggered by {DescribeSource(source)}");
 
