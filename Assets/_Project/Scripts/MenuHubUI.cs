@@ -121,7 +121,7 @@ public class MenuHubUI : MonoBehaviour
         actionRow.style.justifyContent = Justify.SpaceBetween;
         frame.Add(actionRow);
 
-        var startButton = new Button(() => SceneManager.LoadScene(gameSceneName))
+        var startButton = new Button(StartRun)
         {
             text = "START RUN  →"
         };
@@ -153,5 +153,16 @@ public class MenuHubUI : MonoBehaviour
         footer.style.letterSpacing = 1f;
         footer.style.marginTop = 56f;
         frame.Add(footer);
+    }
+
+    private void StartRun()
+    {
+        if (GameStateMachine.HasInstance)
+        {
+            GameStateMachine.Instance.StartRunFromMenu();
+            return;
+        }
+
+        SceneManager.LoadScene(gameSceneName);
     }
 }

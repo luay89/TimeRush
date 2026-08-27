@@ -42,6 +42,11 @@ public static class ScoreSnapshot
         return true;
     }
 
+    public static void CancelQueuedContinueRequest()
+    {
+        ContinueRequested = false;
+    }
+
     public static bool TryConsumeContinueRequest(out ContinuePayload payload)
     {
         if (!ContinueRequested || !HasValue)

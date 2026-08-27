@@ -29,6 +29,9 @@ public sealed class GameBalanceConfig : ScriptableObject
     [Min(0.2f)] public float minimumReactionSeconds = 1f;
     [Min(0.5f)] public float dangerRange = 4f;
 
+    [Header("Input")]
+    [Range(0.05f, 0.25f)] public float laneInputBufferSeconds = 0.12f;
+
     public float GetDifficultyProgress(float effectiveAliveTime)
     {
         float cappedTime = Mathf.Min(Mathf.Max(0f, effectiveAliveTime), maxDifficultySeconds);
@@ -60,5 +63,6 @@ public sealed class GameBalanceConfig : ScriptableObject
         startSpawnInterval = Mathf.Max(minSpawnInterval, startSpawnInterval);
         startFallSpeed = Mathf.Max(0.1f, startFallSpeed);
         maxFallSpeed = Mathf.Max(startFallSpeed, maxFallSpeed);
+        laneInputBufferSeconds = Mathf.Clamp(laneInputBufferSeconds, 0.05f, 0.25f);
     }
 }

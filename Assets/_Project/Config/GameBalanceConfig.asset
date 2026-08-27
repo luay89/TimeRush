@@ -29,3 +29,4 @@ MonoBehaviour:
   lockWindowSeconds: 1.8
   minimumReactionSeconds: 1
   dangerRange: 4
+  laneInputBufferSeconds: 0.12

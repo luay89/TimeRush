@@ -260,6 +260,19 @@ public class GameController : MonoBehaviour
         continueSceneLoadInProgress = true;
         // Re-enter the Game scene with normalized time scale so timers resume correctly.
         Time.timeScale = 1f;
+
+        if (GameStateMachine.HasInstance)
+        {
+            if (GameStateMachine.Instance.ContinueFromResults())
+            {
+                return true;
+            }
+
+            ScoreSnapshot.CancelQueuedContinueRequest();
+            continueSceneLoadInProgress = false;
+            return false;
+        }
+
         SceneManager.LoadScene(SceneNames.Game);
         return true;
     }
@@ -299,6 +312,17 @@ public class GameController : MonoBehaviour
         Debug.Log($"GameOver triggered by {DescribeSource(source)}");
 
         Time.timeScale = 1f;
+
+        if (GameStateMachine.HasInstance)
+        {
+            if (!GameStateMachine.Instance.ShowResults())
+            {
+                Debug.LogError("GameController: FSM rejected the Results transition.", this);
+            }
+
+            return;
+        }
+
         SceneManager.LoadScene(SceneNames.Results);
     }
 

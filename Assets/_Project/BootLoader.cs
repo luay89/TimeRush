@@ -5,6 +5,12 @@ public class BootLoader : MonoBehaviour
 {
     void Start()
     {
-        SceneManager.LoadScene("MenuHub");
+        if (GameStateMachine.HasInstance)
+        {
+            GameStateMachine.Instance.StartBootFlow();
+            return;
+        }
+
+        SceneManager.LoadScene(SceneNames.MenuHub);
     }
 }

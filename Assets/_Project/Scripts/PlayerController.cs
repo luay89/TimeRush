@@ -20,8 +20,7 @@ public class PlayerController : MonoBehaviour
     [SerializeField, Range(0.05f, 0.3f)] private float depthChangeDuration = 0.14f;
     [SerializeField, Range(1.25f, 3f)] private float safeDepthRange = 2f;
 
-    [Header("Input and Feedback")]
-    [SerializeField] private bool allowTouchSwipe = true;
+    [Header("Feedback")]
     [SerializeField] private bool enableNearMissFeedback = true;
     [SerializeField, Range(3.5f, 5.2f)] private float nearMissWidth = 4.8f;
     [SerializeField, Range(1.1f, 2.2f)] private float nearMissDepth = 1.7f;
@@ -34,14 +33,13 @@ public class PlayerController : MonoBehaviour
     private Transform visual;
     private Vector3 baseVisualScale = Vector3.one;
     private float movementPulse;
-    private Vector2 pointerDownPosition;
-    private bool trackingPointer;
 
     public int CurrentLane => currentLane;
     public float CurrentTrackDepth => transform.position.z;
     public float MinimumSafeDepth => trackCenterZ - safeDepthRange;
     public float MaximumSafeDepth => trackCenterZ + safeDepthRange;
     public float LaneChangeProgress { get; private set; }
+    public bool IsLaneTransitioning => Mathf.Abs(lanePositions[currentLane] - transform.position.x) > 0.03f;
 
     public FairnessPlayerState GetFairnessState()
     {
@@ -80,93 +78,45 @@ public class PlayerController : MonoBehaviour
 
     private void Update()
     {
-        ReadKeyboardInput();
-        ReadTouchInput();
         MoveTowardsTargets();
         UpdateVisualMotion();
     }
 
-    private void ReadKeyboardInput()
+    public bool SubmitIntent(PlayerIntent intent)
     {
-        if (Input.GetKeyDown(KeyCode.LeftArrow) || Input.GetKeyDown(KeyCode.A))
+        bool laneAccepted = !intent.HasLaneStep || TryChangeLane(intent.LaneStep);
+
+        if (intent.HasDepthAxis)
         {
-            ChangeLane(-1);
-        }
-        else if (Input.GetKeyDown(KeyCode.RightArrow) || Input.GetKeyDown(KeyCode.D))
-        {
-            ChangeLane(1);
+            AdjustDepthTarget(intent.DepthAxis * forwardBackSpeed * Time.deltaTime);
         }
 
-        float depthInput = 0f;
-
-        if (Input.GetKey(KeyCode.W) || Input.GetKey(KeyCode.UpArrow))
+        if (intent.HasDepthStep)
         {
-            depthInput += 1f;
+            ShiftDepth(intent.DepthStep);
         }
 
-        if (Input.GetKey(KeyCode.S) || Input.GetKey(KeyCode.DownArrow))
-        {
-            depthInput -= 1f;
-        }
-
-        if (Mathf.Abs(depthInput) > 0.01f)
-        {
-            targetDepthZ = Mathf.Clamp(
-                targetDepthZ + depthInput * forwardBackSpeed * Time.deltaTime,
-                MinimumSafeDepth,
-                MaximumSafeDepth);
-        }
+        return laneAccepted;
     }
 
-    private void ReadTouchInput()
+    private bool TryChangeLane(int direction)
     {
-        if (!allowTouchSwipe || Input.touchCount == 0)
+        if (IsLaneTransitioning)
         {
-            return;
+            return false;
         }
 
-        Touch touch = Input.GetTouch(0);
-
-        if (touch.phase == TouchPhase.Began)
-        {
-            pointerDownPosition = touch.position;
-            trackingPointer = true;
-            return;
-        }
-
-        if (!trackingPointer || touch.phase != TouchPhase.Ended)
-        {
-            return;
-        }
-
-        trackingPointer = false;
-        Vector2 delta = touch.position - pointerDownPosition;
-        float threshold = Mathf.Max(32f, Screen.width * 0.08f);
-
-        if (Mathf.Abs(delta.x) >= threshold && Mathf.Abs(delta.x) > Mathf.Abs(delta.y))
-        {
-            ChangeLane(delta.x > 0f ? 1 : -1);
-            return;
-        }
-
-        if (Mathf.Abs(delta.y) >= threshold)
-        {
-            ShiftDepth(delta.y > 0f ? 1f : -1f);
-        }
-    }
-
-    private void ChangeLane(int direction)
-    {
-        int requestedLane = Mathf.Clamp(currentLane + direction, 0, lanePositions.Length - 1);
+        int requestedLane = PlayerIntent.ClampLaneIndex(currentLane, direction, lanePositions.Length);
 
         if (requestedLane == currentLane)
         {
-            return;
+            return false;
         }
 
         currentLane = requestedLane;
         LaneChangeProgress = 0f;
         movementPulse = 1f;
+        return true;
     }
 
     private void ShiftDepth(float direction)
@@ -174,6 +124,16 @@ public class PlayerController : MonoBehaviour
         float step = Mathf.Min(1.5f, safeDepthRange);
         targetDepthZ = Mathf.Clamp(targetDepthZ + direction * step, MinimumSafeDepth, MaximumSafeDepth);
         movementPulse = Mathf.Max(movementPulse, 0.65f);
+    }
+
+    private void AdjustDepthTarget(float amount)
+    {
+        targetDepthZ = Mathf.Clamp(targetDepthZ + amount, MinimumSafeDepth, MaximumSafeDepth);
+
+        if (Mathf.Abs(amount) > 0.01f)
+        {
+            movementPulse = Mathf.Max(movementPulse, 0.35f);
+        }
     }
 
     private void MoveTowardsTargets()

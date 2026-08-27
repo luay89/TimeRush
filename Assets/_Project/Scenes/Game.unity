@@ -402,6 +402,7 @@ GameObject:
   - component: {fileID: 1097900768}
   - component: {fileID: 1097900767}
   - component: {fileID: 1097900773}
+  - component: {fileID: 1097900774}
   m_Layer: 0
   m_Name: player
   m_TagString: Player
@@ -424,6 +425,21 @@ MonoBehaviour:
   trackLayoutConfig: {fileID: 11400000, guid: 31a52ace353b402fbe93cc0aa703e2ac, type: 2}
   moveSpeed: 8
   xLimit: 4.5
+--- !u!114 &1097900774
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1097900766}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8e8befb5b75d4e5fb707c11a78aa92da, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  playerController: {fileID: 1097900767}
+  gameBalanceConfig: {fileID: 11400000, guid: 16b256e0209a49e19760a7ba6c64b46a, type: 2}
+  allowTouchSwipe: 1
 --- !u!65 &1097900768
 BoxCollider:
   m_ObjectHideFlags: 0

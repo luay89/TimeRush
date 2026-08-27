@@ -72,12 +72,26 @@ public class ResultsController : MonoBehaviour
     public void RestartGame()
     {
         Time.timeScale = 1f;
+
+        if (GameStateMachine.HasInstance)
+        {
+            GameStateMachine.Instance.RestartFromResults();
+            return;
+        }
+
         SceneManager.LoadScene(SceneNames.Game);
     }
 
     public void GoToMenu()
     {
         Time.timeScale = 1f;
+
+        if (GameStateMachine.HasInstance)
+        {
+            GameStateMachine.Instance.ReturnToMenu();
+            return;
+        }
+
         SceneManager.LoadScene(SceneNames.MenuHub);
     }
 
