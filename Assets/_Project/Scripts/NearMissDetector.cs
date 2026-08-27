@@ -7,7 +7,6 @@ using UnityEngine;
 public class NearMissDetector : MonoBehaviour
 {
     [SerializeField] private string obstacleTag = "Obstacle";
-    [SerializeField] private string groundTag = "Ground";
     [SerializeField] private LayerMask obstacleLayers = ~0;
     [SerializeField] private int bonusPoints = 5;
 
@@ -98,11 +97,6 @@ public class NearMissDetector : MonoBehaviour
     private bool IsEligibleCollider(Collider other)
     {
         if (!other)
-        {
-            return false;
-        }
-
-        if (!string.IsNullOrEmpty(groundTag) && other.CompareTag(groundTag))
         {
             return false;
         }
