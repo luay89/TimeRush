@@ -9,6 +9,7 @@ public class PlayerController : MonoBehaviour
     private static readonly float[] DefaultLanePositions = { -2.5f, 0f, 2.5f };
 
     [Header("Three-Lane Movement")]
+    [SerializeField] private TrackLayoutConfig trackLayoutConfig;
     [SerializeField] private float[] lanePositions = { -2.5f, 0f, 2.5f };
     [SerializeField] private float laneMoveSpeed = 18f;
     [SerializeField, Range(0.05f, 0.3f)] private float laneChangeDuration = 0.12f;
@@ -41,6 +42,20 @@ public class PlayerController : MonoBehaviour
     public float MinimumSafeDepth => trackCenterZ - safeDepthRange;
     public float MaximumSafeDepth => trackCenterZ + safeDepthRange;
     public float LaneChangeProgress { get; private set; }
+
+    public FairnessPlayerState GetFairnessState()
+    {
+        return new FairnessPlayerState(
+            transform.position.x,
+            transform.position.z,
+            transform.position.y,
+            MinimumSafeDepth,
+            MaximumSafeDepth,
+            laneMoveSpeed,
+            laneChangeDuration,
+            forwardBackSpeed,
+            depthChangeDuration);
+    }
 
     private void Awake()
     {
@@ -216,6 +231,19 @@ public class PlayerController : MonoBehaviour
 
     private void EnsureLaneConfiguration()
     {
+        if (trackLayoutConfig)
+        {
+            if (!trackLayoutConfig.IsValid(out string message))
+            {
+                Debug.LogError($"PlayerController: {message}", this);
+            }
+            else
+            {
+                lanePositions = trackLayoutConfig.CopyLanePositions();
+                safeDepthRange = trackLayoutConfig.SafeDepthRange;
+            }
+        }
+
         if (lanePositions == null || lanePositions.Length != 3)
         {
             lanePositions = (float[])DefaultLanePositions.Clone();

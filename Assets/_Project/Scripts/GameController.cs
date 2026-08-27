@@ -12,18 +12,6 @@ public class GameController : MonoBehaviour
 
     public static GameController Instance { get; private set; }
 
-    [System.Serializable]
-    private class DifficultyProfile
-    {
-        public float trainingDuration = 25f;
-        public float maxDifficultySeconds = 120f;
-        [Range(0.05f, 0.35f)] public float trainingMaxProgress = 0.18f;
-        public float startSpawnInterval = 1.9f;
-        public float minSpawnInterval = 0.85f;
-        public float startFallSpeed = 4.1f;
-        public float maxFallSpeed = 8.5f;
-    }
-
     [Header("Scoring")]
     [SerializeField] private float scorePerSecond = 10f;
     [SerializeField] private float uiUpdateInterval = 0.1f;
@@ -39,7 +27,7 @@ public class GameController : MonoBehaviour
     [SerializeField, Range(0.25f, 1f)] private float difficultyDebugInterval = 0.5f;
 
     [Header("Difficulty")]
-    [SerializeField] private DifficultyProfile difficultyProfile = new DifficultyProfile();
+    [SerializeField] private GameBalanceConfig gameBalanceConfig;
 
     [Header("Continue Settings")]
     [SerializeField, Tooltip("Seconds of invulnerability granted after a continue respawn.")]
@@ -56,7 +44,7 @@ public class GameController : MonoBehaviour
     public bool IsGameOver => _gameOver;
     public bool HasContinuedThisRun => hasContinuedThisRun;
     public bool IsPlayerInvulnerable => invulnerabilityTimer > 0f;
-    public bool IsInTrainingWindow => difficultyProfile != null && GetEffectiveAliveTime() < difficultyProfile.trainingDuration;
+    public bool IsInTrainingWindow => gameBalanceConfig != null && GetEffectiveAliveTime() < gameBalanceConfig.trainingDuration;
     public int NearMissChain { get; private set; }
     public int LastNearMissAward { get; private set; }
     public float FlowTimeRemaining => flowTimer;
@@ -91,6 +79,13 @@ public class GameController : MonoBehaviour
         }
 
         Instance = this;
+
+        if (!gameBalanceConfig)
+        {
+            Debug.LogError("GameController: GameBalanceConfig is required for TimeRush difficulty settings.", this);
+            enabled = false;
+            return;
+        }
 
         uiUpdateInterval = Mathf.Max(0.01f, uiUpdateInterval);
         BestScore = PlayerPrefs.GetInt(BestScoreKey, 0);
@@ -359,70 +354,60 @@ public class GameController : MonoBehaviour
 
     public float GetSpawnInterval()
     {
-        if (difficultyProfile == null)
+        if (!gameBalanceConfig)
         {
             return 1f;
         }
 
-        return Mathf.Lerp(difficultyProfile.startSpawnInterval, difficultyProfile.minSpawnInterval, GetDifficultyProgress());
+        return gameBalanceConfig.GetSpawnInterval(GetEffectiveAliveTime());
     }
 
     public float GetObstacleSpeed()
     {
-        if (difficultyProfile == null)
+        if (!gameBalanceConfig)
         {
             return 0f;
         }
 
-        return Mathf.Lerp(difficultyProfile.startFallSpeed, difficultyProfile.maxFallSpeed, GetDifficultyProgress());
+        return gameBalanceConfig.GetFallSpeed(GetEffectiveAliveTime());
     }
 
     public float GetPaceMultiplier()
     {
-        if (difficultyProfile == null || difficultyProfile.startFallSpeed <= 0f)
+        if (!gameBalanceConfig || gameBalanceConfig.startFallSpeed <= 0f)
         {
             return 1f;
         }
 
-        return GetObstacleSpeed() / difficultyProfile.startFallSpeed;
+        return GetObstacleSpeed() / gameBalanceConfig.startFallSpeed;
     }
 
     public float GetDepthVariation()
     {
-        return Mathf.Lerp(0.65f, 1f, GetDifficultyProgress());
+        return Mathf.Lerp(gameBalanceConfig ? gameBalanceConfig.startingDepthVariation : 0.65f, 1f, GetDifficultyProgress());
     }
 
     public float GetControlHintOpacity()
     {
-        if (difficultyProfile == null)
+        if (!gameBalanceConfig)
         {
             return 0f;
         }
 
-        float fadeStart = Mathf.Max(0f, difficultyProfile.trainingDuration - 5f);
-        float fadeEnd = difficultyProfile.trainingDuration + 3f;
+        float fadeStart = Mathf.Max(0f, gameBalanceConfig.trainingDuration - 5f);
+        float fadeEnd = gameBalanceConfig.trainingDuration + 3f;
         float fade = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(fadeStart, fadeEnd, GetEffectiveAliveTime()));
         return 1f - fade;
     }
 
     private float GetDifficultyProgress()
     {
-        if (difficultyProfile == null)
+        if (!gameBalanceConfig)
         {
             return 0f;
         }
 
-        float cappedTime = Mathf.Min(GetEffectiveAliveTime(), Mathf.Max(difficultyProfile.trainingDuration + 1f, difficultyProfile.maxDifficultySeconds));
-        float trainingDuration = Mathf.Max(1f, difficultyProfile.trainingDuration);
-
-        if (cappedTime <= trainingDuration)
-        {
-            return Mathf.Lerp(0f, difficultyProfile.trainingMaxProgress, cappedTime / trainingDuration);
-        }
-
-        float arcadeProgress = Mathf.InverseLerp(trainingDuration, difficultyProfile.maxDifficultySeconds, cappedTime);
-        float easedArcadeProgress = Mathf.SmoothStep(0f, 1f, arcadeProgress);
-        return Mathf.Lerp(difficultyProfile.trainingMaxProgress, 1f, easedArcadeProgress);
+        return gameBalanceConfig.GetDifficultyProgress(GetEffectiveAliveTime());
     }
 
     private float GetEffectiveAliveTime()

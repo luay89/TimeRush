@@ -1,0 +1,31 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a198e8af5a1541c6bfd0909b3404b0d5, type: 3}
+  m_Name: GameBalanceConfig
+  m_EditorClassIdentifier:
+  trainingDuration: 25
+  maxDifficultySeconds: 120
+  trainingMaxProgress: 0.18
+  startSpawnInterval: 1.9
+  minSpawnInterval: 0.85
+  startFallSpeed: 4.1
+  maxFallSpeed: 8.5
+  startingDepthVariation: 0.65
+  fallbackSpawnInterval: 1.5
+  fallbackFallSpeed: 6
+  spawnHeight: 13.5
+  obstacleLifetime: 10
+  minimumSameLaneGap: 7
+  minimumDepthSeparation: 1.25
+  lockWindowSeconds: 1.8
+  minimumReactionSeconds: 1
+  dangerRange: 4

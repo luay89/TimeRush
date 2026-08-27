@@ -272,6 +272,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 598b52cddd565385c893e66c938ba4c6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  gameBalanceConfig: {fileID: 11400000, guid: 16b256e0209a49e19760a7ba6c64b46a, type: 2}
+  trackLayoutConfig: {fileID: 11400000, guid: 31a52ace353b402fbe93cc0aa703e2ac, type: 2}
   obstaclePrefab: {fileID: 2831478935618217927, guid: ef6b039ace42499689641e0508ec145b, type: 3}
   spawnInterval: 1.5
   spawnRangeX: 4
@@ -419,6 +421,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cd6875523262c59bf9c2025b2c325c99, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  trackLayoutConfig: {fileID: 11400000, guid: 31a52ace353b402fbe93cc0aa703e2ac, type: 2}
   moveSpeed: 8
   xLimit: 4.5
 --- !u!65 &1097900768
@@ -741,6 +744,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5eb3a2b780d9a683cb9d0ac4fbd19da1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  gameBalanceConfig: {fileID: 11400000, guid: 16b256e0209a49e19760a7ba6c64b46a, type: 2}
   scorePerSecond: 10
   uiUpdateInterval: 0.1
   difficultyEverySeconds: 8

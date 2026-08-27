@@ -19,12 +19,14 @@ public class ObstacleLaneMarker : MonoBehaviour
 
     public float CurrentHeight => transform.position.y;
     public float CurrentDepth => transform.position.z;
+    public float CurrentFallSpeed { get; private set; }
 
-    public void Initialize(ObstacleSpawner spawner, int laneIndex, float initialSpawnHeight)
+    public void Initialize(ObstacleSpawner spawner, int laneIndex, float initialSpawnHeight, float fallSpeed)
     {
         owner = spawner;
         LaneIndex = laneIndex;
         spawnHeight = Mathf.Max(dangerHeight + 0.1f, initialSpawnHeight);
+        CurrentFallSpeed = Mathf.Max(0.1f, fallSpeed);
         if (LaneIndex < 0)
         {
             return;
