@@ -73,13 +73,24 @@ public sealed class SafeAreaFitter : MonoBehaviour
             return;
         }
 
-        float pixelsPerPoint = Mathf.Max(0.01f, document.rootVisualElement.panel.scaledPixelsPerPoint);
-        float left = safeArea.x / pixelsPerPoint + uiToolkitHorizontalPadding;
-        float right = (Screen.width - safeArea.xMax) / pixelsPerPoint + uiToolkitHorizontalPadding;
-        float bottom = safeArea.y / pixelsPerPoint + uiToolkitVerticalPadding;
-        float top = (Screen.height - safeArea.yMax) / pixelsPerPoint + uiToolkitVerticalPadding;
-
         var root = document.rootVisualElement;
+        float rootWidth = root.resolvedStyle.width;
+        float rootHeight = root.resolvedStyle.height;
+        if (rootWidth <= 0f || rootHeight <= 0f || float.IsNaN(rootWidth) || float.IsNaN(rootHeight))
+        {
+            uiToolkitPaddingApplied = false;
+            return;
+        }
+
+        // UI Toolkit exposes the rendered root size in its own coordinate space in Unity 2022.
+        // This ratio converts Screen.safeArea pixels without relying on unavailable IPanel APIs.
+        float horizontalUnitsPerPixel = rootWidth / Mathf.Max(1f, Screen.width);
+        float verticalUnitsPerPixel = rootHeight / Mathf.Max(1f, Screen.height);
+        float left = safeArea.x * horizontalUnitsPerPixel + uiToolkitHorizontalPadding;
+        float right = (Screen.width - safeArea.xMax) * horizontalUnitsPerPixel + uiToolkitHorizontalPadding;
+        float bottom = safeArea.y * verticalUnitsPerPixel + uiToolkitVerticalPadding;
+        float top = (Screen.height - safeArea.yMax) * verticalUnitsPerPixel + uiToolkitVerticalPadding;
+
         root.style.paddingLeft = left;
         root.style.paddingRight = right;
         root.style.paddingBottom = bottom;
