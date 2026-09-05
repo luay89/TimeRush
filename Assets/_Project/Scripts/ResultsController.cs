@@ -8,6 +8,17 @@ using TMPro;
 
 public class ResultsController : MonoBehaviour
 {
+    private enum ContinueAdState
+    {
+        Idle,
+        ContinueRequested,
+        WaitingForRewardedAd,
+        RewardGranted,
+        AdUnavailable,
+        AdFailed,
+        AdClosedWithoutReward
+    }
+
     private const string RestartButtonName = "RestartButton";
     private const string MenuButtonName = "MenuButton";
     private const string ContinueButtonName = "ContinueButton";
@@ -28,6 +39,8 @@ public class ResultsController : MonoBehaviour
     [SerializeField] private TextMeshProUGUI bestScoreText;
     [SerializeField] private TextMeshProUGUI resultStatusText;
     [SerializeField] private TextMeshProUGUI gameOverTitle;
+    [SerializeField, Tooltip("Optional rewarded-ad provider. If omitted, ResultsController searches active/persistent objects for an IRewardedAdService implementation.")]
+    private MonoBehaviour rewardedAdServiceSource;
 
     [Header("Testing (Optional)")]
     [SerializeField, Tooltip("Force show Continue button for UI testing only.")]
@@ -41,6 +54,9 @@ public class ResultsController : MonoBehaviour
     private bool continueRequestInProgress;
     private bool navigationRequestInProgress;
     private bool continueAvailable;
+    private ContinueAdState continueAdState;
+    private int continueAttemptId;
+    private IRewardedAdService rewardedAdService;
 
     private bool missingFinalScoreLabelLogged;
     private bool missingBestScoreLabelLogged;
@@ -48,6 +64,7 @@ public class ResultsController : MonoBehaviour
     private void Awake()
     {
         Time.timeScale = 1f;
+        ResolveRewardedAdService();
         EnsureUserInterface();
         BindButtons();
     }
@@ -55,6 +72,7 @@ public class ResultsController : MonoBehaviour
     private void OnEnable()
     {
         Time.timeScale = 1f;
+        ResolveRewardedAdService();
         BindButtons();
         RefreshContinueState();
     }
@@ -115,7 +133,7 @@ public class ResultsController : MonoBehaviour
     }
 
     // =========================
-    // Continue (NO ADS)
+    // Continue (Rewarded Ad Gate)
     // =========================
     private void OnContinuePressed()
     {
@@ -128,37 +146,43 @@ public class ResultsController : MonoBehaviour
         }
 
         continueRequestInProgress = true;
-        if (continueButton) continueButton.interactable = false;
+        continueAdState = ContinueAdState.ContinueRequested;
+        ApplyButtonStates();
 
         if (!continueAvailable)
         {
             Debug.LogWarning("[CONTINUE] Not available", this);
             continueRequestInProgress = false;
+            continueAdState = ContinueAdState.Idle;
             RefreshContinueState();
             return;
         }
 
-        bool ok = false;
+        IRewardedAdService adService = ResolveRewardedAdService();
+        if (adService == null || !adService.IsReady)
+        {
+            Debug.LogWarning("[CONTINUE] Rewarded ad unavailable", this);
+            HandleAdFailure(ContinueAdState.AdUnavailable, "CONTINUE UNAVAILABLE");
+            return;
+        }
+
+        continueAdState = ContinueAdState.WaitingForRewardedAd;
+        int attemptId = ++continueAttemptId;
+        ApplyButtonStates();
+        SetStatusMessage("WAITING FOR REWARD...");
+
         try
         {
-            ok = GameController.ContinueRun();
+            adService.Show(
+                () => HandleRewardGranted(attemptId),
+                () => HandleAdClosed(attemptId),
+                error => HandleAdError(attemptId, error));
         }
         catch (System.Exception ex)
         {
-            Debug.LogError($"[CONTINUE] Exception in ContinueRun(): {ex}", this);
-            ok = false;
+            Debug.LogError($"[CONTINUE] Exception while showing rewarded ad: {ex}", this);
+            HandleAdFailure(ContinueAdState.AdFailed, "AD FAILED");
         }
-
-        Debug.Log($"[CONTINUE] ContinueRun() => {ok}", this);
-
-        // ✅ منع ظهور الكونتينيو مرة ثانية بنفس الجولة بعد نجاحه
-        if (ok)
-        {
-            continueAvailable = false;
-        }
-
-        continueRequestInProgress = false;
-        RefreshContinueState();
     }
 
     // =========================
@@ -915,6 +939,11 @@ public class ResultsController : MonoBehaviour
 
     private bool TryBeginNavigationRequest()
     {
+        if (continueRequestInProgress)
+        {
+            return false;
+        }
+
         if (navigationRequestInProgress)
         {
             return false;
@@ -929,11 +958,145 @@ public class ResultsController : MonoBehaviour
         // ✅ يعتمد على منطقك الحالي: مرة وحدة لكل Run
         continueAvailable = forceShowContinueForTesting || ScoreSnapshot.CanContinue;
 
+        if (!continueRequestInProgress)
+        {
+            continueAdState = ContinueAdState.Idle;
+        }
+
+        ApplyButtonStates();
+
+        if (continueRequestInProgress)
+        {
+            return;
+        }
+
         if (!continueButton)
             return;
 
         continueButton.gameObject.SetActive(continueAvailable);
-        continueButton.interactable = continueAvailable && !continueRequestInProgress;
+    }
+
+    private void ApplyButtonStates()
+    {
+        bool adActive = continueRequestInProgress;
+
+        if (continueButton)
+        {
+            continueButton.gameObject.SetActive(continueAvailable);
+            continueButton.interactable = continueAvailable && !adActive;
+        }
+
+        if (restartButton)
+        {
+            restartButton.interactable = !adActive && !navigationRequestInProgress;
+        }
+
+        if (menuButton)
+        {
+            menuButton.interactable = !adActive && !navigationRequestInProgress;
+        }
+    }
+
+    private IRewardedAdService ResolveRewardedAdService()
+    {
+        if (rewardedAdServiceSource is IRewardedAdService serializedService)
+        {
+            rewardedAdService = serializedService;
+            return rewardedAdService;
+        }
+
+        if (rewardedAdService is MonoBehaviour cachedBehaviour && cachedBehaviour)
+        {
+            return rewardedAdService;
+        }
+
+        MonoBehaviour[] behaviours = FindObjectsOfType<MonoBehaviour>(true);
+        for (int i = 0; i < behaviours.Length; i++)
+        {
+            if (behaviours[i] is IRewardedAdService service)
+            {
+                rewardedAdService = service;
+                return rewardedAdService;
+            }
+        }
+
+        rewardedAdService = null;
+        return null;
+    }
+
+    private void HandleRewardGranted(int attemptId)
+    {
+        if (!IsActiveAttempt(attemptId) || continueAdState == ContinueAdState.RewardGranted)
+        {
+            return;
+        }
+
+        continueAdState = ContinueAdState.RewardGranted;
+        SetStatusMessage("REWARD GRANTED");
+
+        bool ok = false;
+        try
+        {
+            ok = GameController.ContinueRun();
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError($"[CONTINUE] Exception in ContinueRun(): {ex}", this);
+            ok = false;
+        }
+
+        Debug.Log($"[CONTINUE] ContinueRun() => {ok}", this);
+
+        if (ok)
+        {
+            continueAvailable = false;
+            return;
+        }
+
+        HandleAdFailure(ContinueAdState.AdFailed, "CONTINUE FAILED");
+    }
+
+    private void HandleAdClosed(int attemptId)
+    {
+        if (!IsActiveAttempt(attemptId) || continueAdState == ContinueAdState.RewardGranted)
+        {
+            return;
+        }
+
+        Debug.LogWarning("[CONTINUE] Rewarded ad closed without reward", this);
+        HandleAdFailure(ContinueAdState.AdClosedWithoutReward, "NO REWARD GRANTED");
+    }
+
+    private void HandleAdError(int attemptId, string error)
+    {
+        if (!IsActiveAttempt(attemptId) || continueAdState == ContinueAdState.RewardGranted)
+        {
+            return;
+        }
+
+        Debug.LogWarning($"[CONTINUE] Rewarded ad failed: {error}", this);
+        HandleAdFailure(ContinueAdState.AdFailed, "AD FAILED");
+    }
+
+    private bool IsActiveAttempt(int attemptId)
+    {
+        return continueRequestInProgress && continueAttemptId == attemptId;
+    }
+
+    private void HandleAdFailure(ContinueAdState failureState, string statusMessage)
+    {
+        continueAdState = failureState;
+        continueRequestInProgress = false;
+        SetStatusMessage(statusMessage);
+        RefreshContinueState();
+    }
+
+    private void SetStatusMessage(string message)
+    {
+        if (resultStatusText)
+        {
+            resultStatusText.text = message;
+        }
     }
 
     private void LogUiDiagnostics()

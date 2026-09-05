@@ -140,6 +140,7 @@ GameObject:
   - component: {fileID: 136290818}
   - component: {fileID: 136290819}
   - component: {fileID: 136290820}
+  - component: {fileID: 136290821}
   m_Layer: 0
   m_Name: BootLoader
   m_TagString: Untagged
@@ -198,6 +199,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ef4fbd4e2d864dd69c12e018ae13bc44, type: 3}
   m_Name:
   m_EditorClassIdentifier:
+  feedbackConfig: {fileID: 11400000, guid: 26f572c822a14bf9ba183f47d0cf311d, type: 2}
 --- !u!82 &136290815
 AudioSource:
   m_ObjectHideFlags: 0
@@ -293,7 +295,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 136290810}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1eeaa6dc513d46a5859ce4a80b0037a6, type: 3}
+  m_Script: {fileID: 11500000, guid: 4c022dd65f1447d5bdf414e7bb9dd181, type: 3}
   m_Name:
   m_EditorClassIdentifier:
   feedbackConfig: {fileID: 11400000, guid: 26f572c822a14bf9ba183f47d0cf311d, type: 2}
@@ -306,7 +308,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 136290810}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d1af281fb2c440ee82327bc33332b8e7, type: 3}
+  m_Script: {fileID: 11500000, guid: 90209e2143a341e1b0f3be6fe8f39265, type: 3}
   m_Name:
   m_EditorClassIdentifier:
   feedbackConfig: {fileID: 11400000, guid: 26f572c822a14bf9ba183f47d0cf311d, type: 2}
@@ -323,6 +325,20 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier:
   feedbackConfig: {fileID: 11400000, guid: 26f572c822a14bf9ba183f47d0cf311d, type: 2}
+--- !u!114 &136290821
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 136290810}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cefc808c3276db5beb17770e6acb8262, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  simulatedOutcome: 0
+  simulatedDelay: 0.5
 --- !u!1 &721950800
 GameObject:
   m_ObjectHideFlags: 0

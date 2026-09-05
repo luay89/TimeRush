@@ -11,11 +11,12 @@ public sealed class GameStateMachine : MonoBehaviour
     public static bool HasInstance => Instance != null;
     public static bool IsGameplayInputAllowed => Instance == null || Instance.CurrentState == GameStateKind.Playing;
 
-    public GameStateKind CurrentState => stateModel.Current;
+    public GameStateKind CurrentState => EnsureStateModel().Current;
     public event Action<GameStateKind, GameStateKind> StateChanged;
 
     private GameStateModel stateModel;
     private bool sceneLoadInProgress;
+    private bool ownsSingleton;
 
     private void Awake()
     {
@@ -27,18 +28,29 @@ public sealed class GameStateMachine : MonoBehaviour
         }
 
         Instance = this;
-        stateModel = new GameStateModel(GameStateKind.Boot);
-        stateModel.Changed += HandleStateChanged;
+        ownsSingleton = true;
+        EnsureStateModel();
         DontDestroyOnLoad(gameObject);
     }
 
     private void OnEnable()
     {
+        if (!ownsSingleton)
+        {
+            return;
+        }
+
+        EnsureStateModel();
         SceneManager.sceneLoaded += HandleSceneLoaded;
     }
 
     private void OnDisable()
     {
+        if (!ownsSingleton)
+        {
+            return;
+        }
+
         SceneManager.sceneLoaded -= HandleSceneLoaded;
     }
 
@@ -85,7 +97,7 @@ public sealed class GameStateMachine : MonoBehaviour
 
     public bool ReturnToMenu()
     {
-        if (sceneLoadInProgress || !stateModel.TryTransition(GameStateKind.MenuHub))
+        if (sceneLoadInProgress || !EnsureStateModel().TryTransition(GameStateKind.MenuHub))
         {
             return false;
         }
@@ -98,7 +110,7 @@ public sealed class GameStateMachine : MonoBehaviour
 
     public bool ShowResults()
     {
-        if (sceneLoadInProgress || !stateModel.TryTransition(GameStateKind.Results))
+        if (sceneLoadInProgress || !EnsureStateModel().TryTransition(GameStateKind.Results))
         {
             return false;
         }
@@ -116,7 +128,7 @@ public sealed class GameStateMachine : MonoBehaviour
 
     public bool Pause()
     {
-        if (!stateModel.TryTransition(GameStateKind.Paused))
+        if (!EnsureStateModel().TryTransition(GameStateKind.Paused))
         {
             return false;
         }
@@ -127,7 +139,7 @@ public sealed class GameStateMachine : MonoBehaviour
 
     public bool Resume()
     {
-        if (!stateModel.TryTransition(GameStateKind.Playing))
+        if (!EnsureStateModel().TryTransition(GameStateKind.Playing))
         {
             return false;
         }
@@ -138,7 +150,7 @@ public sealed class GameStateMachine : MonoBehaviour
 
     private bool TryBeginSceneLoad(GameStateKind destination, string sceneName)
     {
-        if (sceneLoadInProgress || !stateModel.TryTransition(GameStateKind.Loading))
+        if (sceneLoadInProgress || !EnsureStateModel().TryTransition(GameStateKind.Loading))
         {
             return false;
         }
@@ -158,10 +170,22 @@ public sealed class GameStateMachine : MonoBehaviour
             return;
         }
 
-        if (!stateModel.TryTransition(expectedState))
+        if (!EnsureStateModel().TryTransition(expectedState))
         {
             Debug.LogError($"GameStateMachine: scene '{scene.name}' cannot be entered from {CurrentState}.", this);
         }
+    }
+
+    private GameStateModel EnsureStateModel()
+    {
+        if (stateModel != null)
+        {
+            return stateModel;
+        }
+
+        stateModel = new GameStateModel(GameStateKind.Boot);
+        stateModel.Changed += HandleStateChanged;
+        return stateModel;
     }
 
     private static GameStateKind ResolveSceneState(string sceneName)

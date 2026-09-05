@@ -4,8 +4,15 @@ using UnityEngine;
 [DisallowMultipleComponent]
 public class MockRewardedAdService : MonoBehaviour, IRewardedAdService
 {
-    [Tooltip("If enabled, the mock ad will report a simulated failure when shown.")]
-    [SerializeField] private bool simulateFail;
+    private enum SimulatedOutcome
+    {
+        RewardGranted,
+        ClosedWithoutReward,
+        Failed
+    }
+
+    [Tooltip("Controls the mock ad result for editor/runtime testing.")]
+    [SerializeField] private SimulatedOutcome simulatedOutcome = SimulatedOutcome.RewardGranted;
     [Tooltip("Delay (in seconds) before the mock ad reports completion.")]
     [SerializeField] private float simulatedDelay = 0.5f;
 
@@ -36,11 +43,11 @@ public class MockRewardedAdService : MonoBehaviour, IRewardedAdService
         isShowing = true;
         yield return new WaitForSeconds(simulatedDelay);
 
-        if (simulateFail)
+        if (simulatedOutcome == SimulatedOutcome.Failed)
         {
             onError?.Invoke("Mock rewarded ad simulated a failure.");
         }
-        else
+        else if (simulatedOutcome == SimulatedOutcome.RewardGranted)
         {
             onReward?.Invoke();
         }

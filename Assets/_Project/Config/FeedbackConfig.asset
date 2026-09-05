@@ -29,7 +29,7 @@ MonoBehaviour:
   collisionParticleCount: 22
   nearMissParticleLifetime: 0.28
   collisionParticleLifetime: 0.48
-  nearMissColor: {r: 0.12, g: 0.95, b: 1, a: 1}
+  nearMissColor: {r: 1, g: 0.95, b: 0.6, a: 1}
   collisionColor: {r: 1, g: 0.26, b: 0.1, a: 1}
   laneVolume: 0.35
   depthVolume: 0.28

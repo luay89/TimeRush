@@ -52,4 +52,44 @@
 
 تستعيد Results واجهة قابلة للاستخدام إذا احتوى المشهد القديم على Canvas بمقياس صفري: يعاد مقياس Canvas إلى واحد ويُنشأ فقط ما ينقص من لوحة Score وأزرار Continue/Restart/Menu، من دون حذف الحقول serialized القديمة أو تبديل آلية Continue. تعرض النتائج Score وBest وحالة `NEW BEST` من flag typed يلتقط قبل حفظ Best، ولا تعرض سبب خسارة محدداً إلا عندما يمرر `GameController` سبب `ObstacleCollision` المؤكد من `KillOnHit`؛ في جميع الحالات غير المصنفة تستخدم العبارة العامة `RUN ENDED`. تستمر Restart وMenu في تفويض الانتقال إلى FSM، مع guard يمنع طلبات اللمس المتكررة.
 
-أضيفت اختبارات Edit Mode لـتحويل Safe Area وللقرارات النصية في Results، بما في ذلك عدم اختراع سبب خسارة. نجحت تدقيقات Phase 1–4 الساكنة، وتدقيق التواقيع C#، و`git diff --check`، وتدقيق GUIDات ومراجع scene/prefab، والتحقق من عدم تغيير `GameBalanceConfig` أو `TrackLayoutConfig`. لم يتوفر Unity Editor أو Unity CLI في هذه البيئة عند إعادة الفحص، لذا بقي Compile وNUnit وPlay Mode وConsole وProfiler **محجوبة** ويجب تنفيذها لاحقاً في Unity 2022.3.62f3 قبل اعتبار المرحلة Runtime Verified.
+أضيفت اختبارات Edit Mode لـتحويل Safe Area وللقرارات النصية في Results، بما في ذلك عدم اختراع سبب خسارة. نجحت تدقيقات Phase 1–4 الساكنة، وتدقيق التواقيع C#، و`git diff --check`، وتدقيق GUIDات ومراجع scene/prefab، والتحقق من عدم تغيير `GameBalanceConfig` أو `TrackLayoutConfig`. **(ملاحظة تاريخية)** في وقت كتابة هذا التدقيق سابقاً، لم يكن Unity Editor أو Unity CLI متاحاً في تلك البيئة، فبقي حينها Compile وNUnit وPlay Mode وConsole وProfiler **محجوبة** بانتظار تنفيذها في Unity 2022.3.62f3؛ هذه العبارة لا تمثل حالة المشروع الحالية.
+
+**تحقق حالي (حقائق مؤكدة فقط):** يستطيع Unity 2022.3.62f3 في وضع batchmode تحميل المشروع بنجاح. اختبارات Unity EditMode: 26/26 PASS. تحقق runtime لـPhase 10 (mock للإعلان المكافئ): 5/5 سيناريوهات PASS، والسيناريوهات الخمسة المتحققة هي RewardGranted وClosedWithoutReward وUnavailable وFailed وDoubleClick. لم يُتحقق بعد من Play Mode الكامل أو الاختبار اليدوي للانحدار، ولا يُدّعى ذلك ما لم يُتحقق منه صراحةً. ولا يُدّعى تحقق Profiler.
+
+## Phase 7 — Runtime Verification Checklist (Feedback + Accessibility)
+
+MENU:
+- Open MenuHub.
+- Toggle Camera Shake, Reduce Flashing, and Audio.
+- Leave/re-enter MenuHub and verify saved values persist.
+
+GAME:
+- Start run from MenuHub.
+- Pause, open Settings, change each toggle, close Settings, Resume.
+- Verify run continues without restart and without score/difficulty/spawn/movement changes.
+
+FEEDBACK:
+- Verify Lane and Depth movement feedback remains functional.
+- Verify Near Miss and Collision feedback fire as before (collision flash remains intentional).
+- Verify Pause/Resume and Pace milestone feedback behavior.
+- Verify Game Over feedback and transition behavior.
+
+FLOW:
+- Verify full loop: Boot -> MenuHub -> Game -> Results -> Menu.
+
+## Phase 8 — Pre-Merge Verification Gate
+
+Before accepting Scene/Prefab changes:
+
+1. C# diagnostics PASS.
+2. Existing tests PASS.
+3. FeedbackConfigReferenceValidator PASS.
+4. Missing Script scan PASS.
+5. GUID resolution PASS.
+6. .cs/.meta integrity PASS.
+7. `git diff --check` PASS.
+8. Unity Play Mode verification when Unity Editor is available.
+
+CI-ready editor validation entry point:
+- Run Unity in batch mode with `FeedbackConfigReferenceValidator.ValidateOrThrow` when a Unity-capable environment is available.
+- Actual Unity Editor execution remains environment-dependent and is not replaced by `dotnet test` in this repository.

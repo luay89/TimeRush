@@ -340,7 +340,7 @@ Camera:
     height: 1
   near clip plane: 0.3
   far clip plane: 1000
-  field of view: 64
+  field of view: 58
   orthographic: 0
   orthographic size: 5
   m_Depth: -1
@@ -398,7 +398,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 751755595}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 19faba5cf43f495586dc50be67fa65ae, type: 3}
+  m_Script: {fileID: 11500000, guid: cc919ab029384a689cd0aa9bf512a8db, type: 3}
   m_Name:
   m_EditorClassIdentifier:
   feedbackConfig: {fileID: 11400000, guid: 26f572c822a14bf9ba183f47d0cf311d, type: 2}
@@ -464,7 +464,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 1097900766}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b1256ba9255b41e7a8d0a31692ead8b5, type: 3}
+  m_Script: {fileID: 11500000, guid: f1a8bb8870ae462db83670d5bb051a82, type: 3}
   m_Name:
   m_EditorClassIdentifier:
   feedbackConfig: {fileID: 11400000, guid: 26f572c822a14bf9ba183f47d0cf311d, type: 2}
@@ -1091,7 +1091,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: -1.25, y: 0.03, z: 5}
-  m_LocalScale: {x: 0.08, y: 0.02, z: 50}
+  m_LocalScale: {x: 0.12, y: 0.02, z: 50}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 1800000001}
@@ -1174,7 +1174,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 1.25, y: 0.03, z: 5}
-  m_LocalScale: {x: 0.08, y: 0.02, z: 50}
+  m_LocalScale: {x: 0.12, y: 0.02, z: 50}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 1800000001}
