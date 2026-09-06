@@ -23,12 +23,19 @@ public class MenuHubUI : MonoBehaviour
     private bool cameraShakeEnabled;
     private bool reduceFlashingEnabled;
     private bool audioEnabled;
+    private ProgressionConfig progressionConfig;
 
     private void Awake()
     {
         cameraShakeEnabled = FeedbackPreferences.IsCameraShakeEnabled(feedbackConfig);
         reduceFlashingEnabled = FeedbackPreferences.IsReduceFlashingEnabled(feedbackConfig);
         audioEnabled = FeedbackPreferences.IsAudioEnabled(feedbackConfig);
+
+        progressionConfig = Resources.Load<ProgressionConfig>("ProgressionConfig");
+        if (!progressionConfig)
+        {
+            progressionConfig = ProgressionConfig.CreateDefault();
+        }
 
         var document = GetComponent<UIDocument>();
         if (!document)
@@ -101,7 +108,10 @@ public class MenuHubUI : MonoBehaviour
         mark.style.letterSpacing = 4f;
         header.Add(mark);
 
-        var meta = new Label($"BEST  {PlayerPrefs.GetInt(BestScoreKey, 0)}   //   ENDLESS DODGE");
+        int bestScore = PlayerPrefs.GetInt(BestScoreKey, 0);
+        var progression = ProgressionProfile.Load();
+        var rank = progressionConfig.ResolveRank(bestScore);
+        var meta = new Label($"{rank.name}   //   BEST {bestScore}   //   RUNS {progression.TotalRuns}");
         meta.style.color = Muted;
         meta.style.fontSize = 14f;
         meta.style.unityTextAlign = TextAnchor.MiddleRight;

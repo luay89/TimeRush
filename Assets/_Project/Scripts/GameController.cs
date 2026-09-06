@@ -264,6 +264,9 @@ public class GameController : MonoBehaviour
         {
             if (GameStateMachine.Instance.ContinueFromResults())
             {
+                // The continued run is the same logical run: undo its recorded end so the
+                // eventual final death recounts it once with the full score.
+                ProgressionProfile.RollbackLastRun();
                 return true;
             }
 
@@ -272,6 +275,7 @@ public class GameController : MonoBehaviour
             return false;
         }
 
+        ProgressionProfile.RollbackLastRun();
         SceneManager.LoadScene(SceneNames.Game);
         return true;
     }
@@ -309,6 +313,9 @@ public class GameController : MonoBehaviour
         }
 
         PlayerPrefs.Save();
+        // Record the completed run into cross-run progression totals. A continued run is
+        // rolled back in ContinueRun so it is counted once with its final score.
+        ProgressionProfile.RecordRun(CurrentScore);
         // Persist final state so the Results scene can decide whether continue is still allowed.
         RunLossReason lossReason = source is KillOnHit ? RunLossReason.ObstacleCollision : RunLossReason.None;
         ScoreSnapshot.Set(CurrentScore, BestScore, hasContinuedThisRun, true, lossReason, setNewBest);
