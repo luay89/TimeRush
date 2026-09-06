@@ -1,0 +1,75 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 89c4d7d1d5ca45ffa0d9fb4c06d0fcd9, type: 3}
+  m_Name: ObstaclePatternSet
+  m_EditorClassIdentifier:
+  patterns:
+  - Name: Single
+    Type: 0
+    MinDifficulty: 0
+    Weight: 55
+    AllowMirror: 0
+    Placements: []
+  - Name: Alternating Lanes
+    Type: 1
+    MinDifficulty: 0.15
+    Weight: 18
+    AllowMirror: 1
+    Placements:
+    - Lane: 0
+      DepthIndex: 1
+      Beat: 0
+    - Lane: 2
+      DepthIndex: 1
+      Beat: 1
+    - Lane: 1
+      DepthIndex: 1
+      Beat: 2
+  - Name: Double Lane Block
+    Type: 2
+    MinDifficulty: 0.35
+    Weight: 12
+    AllowMirror: 1
+    Placements:
+    - Lane: 0
+      DepthIndex: 1
+      Beat: 0
+    - Lane: 1
+      DepthIndex: 1
+      Beat: 0
+  - Name: Staggered
+    Type: 3
+    MinDifficulty: 0.5
+    Weight: 9
+    AllowMirror: 1
+    Placements:
+    - Lane: 0
+      DepthIndex: 0
+      Beat: 0
+    - Lane: 2
+      DepthIndex: 2
+      Beat: 1
+    - Lane: 1
+      DepthIndex: 1
+      Beat: 2
+  - Name: Depth Lane Combo
+    Type: 4
+    MinDifficulty: 0.6
+    Weight: 6
+    AllowMirror: 1
+    Placements:
+    - Lane: 1
+      DepthIndex: 0
+      Beat: 0
+    - Lane: 1
+      DepthIndex: 2
+      Beat: 0
