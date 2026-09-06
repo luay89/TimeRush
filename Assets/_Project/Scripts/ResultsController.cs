@@ -24,6 +24,7 @@ public class ResultsController : MonoBehaviour
     private const string ContinueButtonName = "ContinueButton";
     private const string FinalScoreLabelName = "FinalScoreText";
     private const string BestScoreLabelName = "BestScoreText";
+    private const string ProgressionSummaryLabelName = "ProgressionSummaryText";
     private const string ResultStatusLabelName = "ResultStatusText";
     private const string GameOverTitleName = "GameOverTitle";
     private const string BestScoreKey = "BEST_SCORE";
@@ -39,6 +40,7 @@ public class ResultsController : MonoBehaviour
     [SerializeField] private TextMeshProUGUI bestScoreText;
     [SerializeField] private TextMeshProUGUI resultStatusText;
     [SerializeField] private TextMeshProUGUI gameOverTitle;
+    [SerializeField] private TextMeshProUGUI progressionSummaryText;
     [SerializeField, Tooltip("Optional rewarded-ad provider. If omitted, ResultsController searches active/persistent objects for an IRewardedAdService implementation.")]
     private MonoBehaviour rewardedAdServiceSource;
 
@@ -61,9 +63,12 @@ public class ResultsController : MonoBehaviour
     private bool missingFinalScoreLabelLogged;
     private bool missingBestScoreLabelLogged;
 
+    private ProgressionConfig progressionConfig;
+
     private void Awake()
     {
         Time.timeScale = 1f;
+        ResolveProgressionConfig();
         ResolveRewardedAdService();
         EnsureUserInterface();
         BindButtons();
@@ -701,6 +706,11 @@ public class ResultsController : MonoBehaviour
             bestScoreText = FindLabel(canvasTransform, BestScoreLabelName);
         }
 
+        if (!progressionSummaryText)
+        {
+            progressionSummaryText = FindLabel(canvasTransform, ProgressionSummaryLabelName);
+        }
+
         if (!resultStatusText)
         {
             resultStatusText = FindLabel(canvasTransform, ResultStatusLabelName);
@@ -742,6 +752,38 @@ public class ResultsController : MonoBehaviour
         AttemptScoreLabelLookup(canvasTransform);
         resultStatusText = resultStatusText ? resultStatusText : CreateResultStatusLabel(canvasTransform);
         ConfigureResultStatusLabel(resultStatusText);
+        EnsureProgressionSummaryLabel(canvasTransform);
+    }
+
+    private void EnsureProgressionSummaryLabel(Transform canvasTransform)
+    {
+        if (!progressionSummaryText)
+        {
+            // Prefer sitting directly under the Best label so it flows in the same layout;
+            // fall back to the canvas root if the score labels are not available yet.
+            Transform parent = bestScoreText ? bestScoreText.transform.parent : canvasTransform;
+            progressionSummaryText = CreateLabel(parent, ProgressionSummaryLabelName, new Vector2(0f, -505f), 30f, string.Empty, true);
+
+            if (bestScoreText && progressionSummaryText.transform.parent == bestScoreText.transform.parent)
+            {
+                progressionSummaryText.transform.SetSiblingIndex(bestScoreText.transform.GetSiblingIndex() + 1);
+            }
+        }
+
+        ConfigureProgressionSummaryLabel(progressionSummaryText);
+    }
+
+    private static void ConfigureProgressionSummaryLabel(TextMeshProUGUI label)
+    {
+        if (!label)
+        {
+            return;
+        }
+
+        label.color = new Color(0.62f, 0.82f, 1f, 1f);
+        label.characterSpacing = 1.5f;
+        label.enableWordWrapping = false;
+        label.raycastTarget = false;
     }
 
     private void EnsureResultControls(Transform canvasTransform)
@@ -935,6 +977,29 @@ public class ResultsController : MonoBehaviour
         {
             resultStatusText.text = display.StatusText;
         }
+
+        if (progressionSummaryText)
+        {
+            ProgressionModel progression = ProgressionProfile.Load();
+            ProgressionConfig.RankResult rank = ResolveProgressionConfig().ResolveRank(bestScore);
+            progressionSummaryText.text = ResultsPresentation.BuildProgressionSummary(progression, rank);
+        }
+    }
+
+    private ProgressionConfig ResolveProgressionConfig()
+    {
+        if (progressionConfig)
+        {
+            return progressionConfig;
+        }
+
+        progressionConfig = Resources.Load<ProgressionConfig>("ProgressionConfig");
+        if (!progressionConfig)
+        {
+            progressionConfig = ProgressionConfig.CreateDefault();
+        }
+
+        return progressionConfig;
     }
 
     private bool TryBeginNavigationRequest()

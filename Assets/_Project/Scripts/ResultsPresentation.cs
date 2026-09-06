@@ -28,4 +28,18 @@ public static class ResultsPresentation
 
         return new DisplayData($"Score: {clampedFinalScore}", $"Best: {displayedBestScore}", status);
     }
+
+    /// <summary>
+    /// Builds the additive cross-run progression line shown on Results from the persisted
+    /// <see cref="ProgressionModel"/> and the resolved rank. Pure so it can be tested without
+    /// scenes; it only reads the supplied progression values and never mutates persistence.
+    /// </summary>
+    public static string BuildProgressionSummary(ProgressionModel progression, ProgressionConfig.RankResult rank)
+    {
+        int runs = progression.TotalRuns < 0 ? 0 : progression.TotalRuns;
+        long lifetime = progression.LifetimeScore < 0 ? 0 : progression.LifetimeScore;
+        string rankName = string.IsNullOrEmpty(rank.name) ? "—" : rank.name;
+
+        return $"RANK {rankName}   //   RUNS {runs}   //   LIFETIME {lifetime}";
+    }
 }
