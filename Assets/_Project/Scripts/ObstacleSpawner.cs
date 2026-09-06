@@ -42,6 +42,11 @@ public class ObstacleSpawner : MonoBehaviour
     private float dangerRange = 4f;
     [SerializeField, Tooltip("Optional reference to the player transform; defaults to world Y=0 when null.")]
     private Transform playerReference;
+    [Header("Pattern Variety")]
+    [SerializeField, Tooltip("Optional pattern library. Falls back to Resources/ObstaclePatternSet, then a built-in default set.")]
+    private ObstaclePatternSet patternSet;
+    [SerializeField, Tooltip("Enable recognizable multi-obstacle patterns. Fairness stays authoritative regardless of this flag.")]
+    private bool enablePatternVariety = true;
 
     private float timer;
     private bool prefabMissingLogged;
@@ -63,8 +68,28 @@ public class ObstacleSpawner : MonoBehaviour
     private readonly List<FairnessObstacleState> activeFairnessObstacles = new List<FairnessObstacleState>(8);
     private readonly FairnessValidator fairnessValidator = new FairnessValidator();
     private DeterministicRandom deterministicRandom;
+    private IRandomSource randomSource;
+    private PatternDirector patternDirector;
+    private readonly List<PatternSpawnRequest> beatRequests = new List<PatternSpawnRequest>(4);
+    private readonly List<FairnessObstacleState> groupCandidates = new List<FairnessObstacleState>(4);
+    private readonly List<ResolvedPlacement> resolvedPlacements = new List<ResolvedPlacement>(4);
+    private readonly List<FairnessObstacleState> fairnessScratch = new List<FairnessObstacleState>(16);
     private PlayerController playerControllerReference;
     private bool configInvalid;
+
+    private readonly struct ResolvedPlacement
+    {
+        public readonly int Lane;
+        public readonly int DepthIndex;
+        public readonly float SpawnZ;
+
+        public ResolvedPlacement(int lane, int depthIndex, float spawnZ)
+        {
+            Lane = lane;
+            DepthIndex = depthIndex;
+            SpawnZ = spawnZ;
+        }
+    }
 
     private void Awake()
     {
@@ -95,7 +120,20 @@ public class ObstacleSpawner : MonoBehaviour
         }
 
         deterministicRandom = useDeterministicSeedForTesting ? new DeterministicRandom(deterministicSeed) : null;
+        randomSource = deterministicRandom != null ? (IRandomSource)deterministicRandom : UnityRandomSource.Shared;
+        patternDirector = new PatternDirector(ResolvePatternSet());
         EnsureLaneArrays();
+    }
+
+    private ObstaclePatternSet ResolvePatternSet()
+    {
+        if (patternSet)
+        {
+            return patternSet;
+        }
+
+        ObstaclePatternSet loaded = Resources.Load<ObstaclePatternSet>("ObstaclePatternSet");
+        return loaded ? loaded : ObstaclePatternSet.CreateDefault();
     }
 
     private void Update()
@@ -137,8 +175,102 @@ public class ObstacleSpawner : MonoBehaviour
         {
             timer -= interval;
             float speed = controllerAvailable ? gc.GetObstacleSpeed() : fallbackSpeed;
-            TrySpawnObstacle(speed);
+            SpawnForBeat(speed, gc);
         }
+    }
+
+    private void SpawnForBeat(float speed, GameController gc)
+    {
+        if (!enablePatternVariety || patternDirector == null)
+        {
+            TrySpawnObstacle(speed);
+            return;
+        }
+
+        float difficulty = gc != null ? gc.GetDifficultyProgress() : 0f;
+        patternDirector.TickBeat(difficulty, randomSource, beatRequests);
+
+        if (beatRequests.Count == 0)
+        {
+            // Intentional spacing beat inside a multi-beat pattern; nothing spawns.
+            return;
+        }
+
+        if (beatRequests.Count == 1 && beatRequests[0].IsBaseline)
+        {
+            // Baseline family: reuse the unchanged single-obstacle path (all heuristics intact).
+            TrySpawnObstacle(speed);
+            return;
+        }
+
+        ExecutePatternGroup(speed);
+    }
+
+    private void ExecutePatternGroup(float speed)
+    {
+        resolvedPlacements.Clear();
+        groupCandidates.Clear();
+        float variation = GameController.Instance ? GameController.Instance.GetDepthVariation() : 1f;
+
+        for (int i = 0; i < beatRequests.Count; i++)
+        {
+            PatternSpawnRequest request = beatRequests[i];
+            if (request.IsBaseline)
+            {
+                continue;
+            }
+
+            int lane = Mathf.Clamp(request.Lane, 0, lanePositions.Length - 1);
+            int depthIndex = request.DepthIndex;
+            float spawnZ;
+
+            if (depthIndex >= 0 && depthIndex < depthOffsets.Length)
+            {
+                spawnZ = transform.position.z + depthOffsets[depthIndex] * variation;
+            }
+            else if (!TrySelectDepth(lane, out depthIndex, out spawnZ))
+            {
+                // No free depth for this placement; drop it from the group.
+                continue;
+            }
+
+            resolvedPlacements.Add(new ResolvedPlacement(lane, depthIndex, spawnZ));
+            groupCandidates.Add(new FairnessObstacleState(lane, spawnHeight, spawnZ, speed));
+        }
+
+        if (resolvedPlacements.Count == 0)
+        {
+            TrySpawnObstacle(speed);
+            return;
+        }
+
+        bool groupAllowed = !enableFairnessRules || !playerControllerReference || PatternFairnessProbe.CanPlaceGroup(
+            fairnessValidator,
+            lanePositions,
+            CollectActiveFairnessObstacles(),
+            playerControllerReference.GetFairnessState(),
+            groupCandidates,
+            dangerRange,
+            reactionTimeSeconds,
+            minDepthSeparation,
+            fairnessScratch);
+
+        if (!groupAllowed)
+        {
+            // The candidate pattern is not survivable from the current state; reject it and
+            // fall back to a single fairness-validated spawn so the beat is never impossible.
+            DebugLane("reject pattern group (temporal); falling back to single spawn");
+            TrySpawnObstacle(speed);
+            return;
+        }
+
+        for (int i = 0; i < resolvedPlacements.Count; i++)
+        {
+            ResolvedPlacement placement = resolvedPlacements[i];
+            InstantiateObstacle(placement.Lane, placement.SpawnZ, placement.DepthIndex, speed);
+        }
+
+        DebugLane($"spawn pattern group x{resolvedPlacements.Count} ({patternDirector.LastSelectedType}) | {FormatLaneStates()}");
     }
 
     private void EnsureKillOnHit(GameObject obstacleInstance)
@@ -201,6 +333,13 @@ public class ObstacleSpawner : MonoBehaviour
             return false;
         }
 
+        InstantiateObstacle(laneIndex, spawnZ, depthIndex, speed);
+        DebugLane($"spawn lane {laneIndex}, depth {depthIndex} | {FormatLaneStates()}" );
+        return true;
+    }
+
+    private void InstantiateObstacle(int laneIndex, float spawnZ, int depthIndex, float speed)
+    {
         float laneX = lanePositions[laneIndex];
         Vector3 spawnPos = new Vector3(laneX, spawnHeight, spawnZ);
         var instance = Instantiate(obstaclePrefab, spawnPos, Quaternion.identity);
@@ -209,8 +348,6 @@ public class ObstacleSpawner : MonoBehaviour
         AttachLaneMarker(instance, laneIndex, speed);
         ApplySpeed(instance, speed);
         CommitLaneSpawn(laneIndex, depthIndex, speed);
-        DebugLane($"spawn lane {laneIndex}, depth {depthIndex} | {FormatLaneStates()}" );
-        return true;
     }
 
     private bool TrySelectDepth(int laneIndex, out int depthIndex, out float spawnZ)
@@ -256,6 +393,27 @@ public class ObstacleSpawner : MonoBehaviour
             return true;
         }
 
+        var candidate = new FairnessObstacleState(laneIndex, spawnHeight, spawnZ, speed);
+        var context = new FairnessValidationContext(
+            lanePositions,
+            CollectActiveFairnessObstacles(),
+            playerControllerReference.GetFairnessState(),
+            candidate,
+            dangerRange,
+            reactionTimeSeconds,
+            minDepthSeparation);
+
+        FairnessDecision decision = fairnessValidator.Evaluate(context);
+        if (!decision.IsAllowed)
+        {
+            DebugLane($"reject lane {laneIndex} (temporal {decision.Reason})");
+        }
+
+        return decision.IsAllowed;
+    }
+
+    private IReadOnlyList<FairnessObstacleState> CollectActiveFairnessObstacles()
+    {
         activeFairnessObstacles.Clear();
 
         for (int lane = 0; lane < laneOccupants.Length; lane++)
@@ -273,23 +431,7 @@ public class ObstacleSpawner : MonoBehaviour
             }
         }
 
-        var candidate = new FairnessObstacleState(laneIndex, spawnHeight, spawnZ, speed);
-        var context = new FairnessValidationContext(
-            lanePositions,
-            activeFairnessObstacles,
-            playerControllerReference.GetFairnessState(),
-            candidate,
-            dangerRange,
-            reactionTimeSeconds,
-            minDepthSeparation);
-
-        FairnessDecision decision = fairnessValidator.Evaluate(context);
-        if (!decision.IsAllowed)
-        {
-            DebugLane($"reject lane {laneIndex} (temporal {decision.Reason})");
-        }
-
-        return decision.IsAllowed;
+        return activeFairnessObstacles;
     }
 
     private bool IsDepthOccupied(int laneIndex, float candidateZ)

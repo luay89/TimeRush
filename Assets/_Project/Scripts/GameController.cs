@@ -430,7 +430,7 @@ public class GameController : MonoBehaviour
         return 1f - fade;
     }
 
-    private float GetDifficultyProgress()
+    public float GetDifficultyProgress()
     {
         if (!gameBalanceConfig)
         {

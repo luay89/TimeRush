@@ -1,7 +1,7 @@
 /// <summary>
 /// Small deterministic random source for tests and reproducible spawn diagnostics only.
 /// </summary>
-public sealed class DeterministicRandom
+public sealed class DeterministicRandom : IRandomSource
 {
     private uint state;
 
