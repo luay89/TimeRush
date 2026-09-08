@@ -3,10 +3,11 @@ using UnityEngine;
 
 /// <summary>
 /// Development-only deterministic pattern sampler. It reuses the exact production
-/// pieces (<see cref="PatternDirector"/>, <see cref="PatternFairnessProbe"/> and the
-/// single <see cref="FairnessValidator"/> authority) to confirm that, across many
-/// beats and every difficulty band, no obstacle is ever added without a validated
-/// reachable survival action. It never drives normal gameplay random state.
+/// pieces (<see cref="PatternDirector"/>, <see cref="ChallengeDirector"/>,
+/// <see cref="PatternFairnessProbe"/> and the single <see cref="FairnessValidator"/>
+/// authority) to confirm that, across many beats and every difficulty band, no obstacle
+/// is ever added without a validated reachable survival action -- and that the challenge
+/// sequencing layer never changes that guarantee. It never drives normal gameplay random state.
 /// </summary>
 public sealed class PatternSimulation
 {
@@ -26,6 +27,7 @@ public sealed class PatternSimulation
 
         var random = new DeterministicRandom(seed);
         var director = new PatternDirector(set);
+        var challenge = new ChallengeDirector(balance.GetChallengeConfig());
         float[] lanes = layout.CopyLanePositions();
         float[] depths = layout.CopyDepthOffsets();
         float interval = balance.GetSpawnInterval(effectiveAliveTime);
@@ -40,13 +42,59 @@ public sealed class PatternSimulation
         int spawned = 0;
         int groupsAccepted = 0;
         int groupsRejected = 0;
+        int fallbackSuccesses = 0;
         int failures = 0;
         var typeCounts = new int[5];
+
+        int normalBeats = 0;
+        int pressureBeats = 0;
+        int recoveryBeats = 0;
+        int immediateRepeats = 0;
+        int previousType = -1;
+        int previousPreviousType = -1;
+        var transitionKeys = new HashSet<int>();
+        var tripleKeys = new HashSet<int>();
 
         for (int beat = 0; beat < beats; beat++)
         {
             AdvanceActive(interval);
-            director.TickBeat(progress, random, requests);
+
+            bool wasMidPattern = director.IsMidPattern;
+
+            // The challenge layer only reshapes the same difficulty01 signal PatternDirector
+            // already gates and weights patterns on; it never touches fairness, speed, or interval.
+            float effectiveDifficulty = challenge.Advance(progress, random);
+
+            switch (challenge.State)
+            {
+                case ChallengeState.Pressure: pressureBeats++; break;
+                case ChallengeState.Recovery: recoveryBeats++; break;
+                default: normalBeats++; break;
+            }
+
+            director.TickBeat(effectiveDifficulty, random, requests);
+
+            if (!wasMidPattern)
+            {
+                int currentType = (int)director.LastSelectedType;
+
+                if (previousType >= 0)
+                {
+                    transitionKeys.Add(previousType * 5 + currentType);
+                    if (currentType == previousType)
+                    {
+                        immediateRepeats++;
+                    }
+                }
+
+                if (previousType >= 0 && previousPreviousType >= 0)
+                {
+                    tripleKeys.Add((previousPreviousType * 5 + previousType) * 5 + currentType);
+                }
+
+                previousPreviousType = previousType;
+                previousType = currentType;
+            }
 
             if (requests.Count == 0)
             {
@@ -67,7 +115,10 @@ public sealed class PatternSimulation
             {
                 groupsRejected++;
                 // Reject the candidate group and fall back to a single validated spawn.
-                TrySingleFallback(lanes, depths, variation, speed, random, player, balance, ref spawned, ref failures, typeCounts);
+                if (TrySingleFallback(lanes, depths, variation, speed, random, player, balance, ref spawned, ref failures, typeCounts))
+                {
+                    fallbackSuccesses++;
+                }
                 continue;
             }
 
@@ -88,7 +139,10 @@ public sealed class PatternSimulation
             }
         }
 
-        return new PatternSimulationResult(beats, spawned, groupsAccepted, groupsRejected, failures, typeCounts);
+        return new PatternSimulationResult(
+            beats, spawned, groupsAccepted, groupsRejected, failures, typeCounts,
+            normalBeats, pressureBeats, recoveryBeats,
+            fallbackSuccesses, transitionKeys.Count, tripleKeys.Count, immediateRepeats);
     }
 
     private void BuildCandidates(bool baseline, float[] lanes, float[] depths, float variation, float speed, DeterministicRandom random)
@@ -113,7 +167,7 @@ public sealed class PatternSimulation
         }
     }
 
-    private void TrySingleFallback(float[] lanes, float[] depths, float variation, float speed, DeterministicRandom random, in FairnessPlayerState player, GameBalanceConfig balance, ref int spawned, ref int failures, int[] typeCounts)
+    private bool TrySingleFallback(float[] lanes, float[] depths, float variation, float speed, DeterministicRandom random, in FairnessPlayerState player, GameBalanceConfig balance, ref int spawned, ref int failures, int[] typeCounts)
     {
         int lane = random.NextInt(lanes.Length);
         float depth = depths[random.NextInt(depths.Length)] * variation;
@@ -123,12 +177,13 @@ public sealed class PatternSimulation
         if (!PatternFairnessProbe.CanPlaceGroup(validator, lanes, active, player, candidates, balance.dangerRange, balance.minimumReactionSeconds, balance.minimumDepthSeparation, scratch))
         {
             // No fair single spawn this beat; nothing is placed.
-            return;
+            return false;
         }
 
         typeCounts[(int)ObstaclePatternType.Single] += 1;
         active.Add(candidates[0]);
         spawned++;
+        return true;
     }
 
     private void AdvanceActive(float seconds)
@@ -151,7 +206,7 @@ public sealed class PatternSimulation
 
 public readonly struct PatternSimulationResult
 {
-    public static PatternSimulationResult Invalid => new PatternSimulationResult(0, 0, 0, 0, 1, new int[5]);
+    public static PatternSimulationResult Invalid => new PatternSimulationResult(0, 0, 0, 0, 1, new int[5], 0, 0, 0, 0, 0, 0, 0);
 
     public readonly int Beats;
     public readonly int ObstaclesSpawned;
@@ -164,7 +219,27 @@ public readonly struct PatternSimulationResult
     public readonly int StaggeredCount;
     public readonly int DepthLaneComboCount;
 
-    public PatternSimulationResult(int beats, int obstaclesSpawned, int groupsAccepted, int groupsRejected, int failures, int[] typeCounts)
+    /// <summary>Beats where the challenge sequencing layer reported NORMAL/PRESSURE/RECOVERY.</summary>
+    public readonly int ChallengeNormalBeats;
+    public readonly int ChallengePressureBeats;
+    public readonly int ChallengeRecoveryBeats;
+
+    /// <summary>Number of rejected candidate groups that still produced a safe single-spawn fallback.</summary>
+    public readonly int FallbackSuccessCount;
+
+    /// <summary>Distinct (previous-family, selected-family) transitions observed across selection events.</summary>
+    public readonly int UniqueTransitionCount;
+
+    /// <summary>Distinct 3-selection family sequences observed (measures sequence-level variety).</summary>
+    public readonly int UniqueTripleSequenceCount;
+
+    /// <summary>Selection events where the newly selected family equals the immediately preceding one.</summary>
+    public readonly int ImmediateRepeatCount;
+
+    public PatternSimulationResult(
+        int beats, int obstaclesSpawned, int groupsAccepted, int groupsRejected, int failures, int[] typeCounts,
+        int challengeNormalBeats = 0, int challengePressureBeats = 0, int challengeRecoveryBeats = 0,
+        int fallbackSuccessCount = 0, int uniqueTransitionCount = 0, int uniqueTripleSequenceCount = 0, int immediateRepeatCount = 0)
     {
         Beats = beats;
         ObstaclesSpawned = obstaclesSpawned;
@@ -176,6 +251,13 @@ public readonly struct PatternSimulationResult
         DoubleLaneBlockCount = typeCounts != null && typeCounts.Length > 2 ? typeCounts[2] : 0;
         StaggeredCount = typeCounts != null && typeCounts.Length > 3 ? typeCounts[3] : 0;
         DepthLaneComboCount = typeCounts != null && typeCounts.Length > 4 ? typeCounts[4] : 0;
+        ChallengeNormalBeats = challengeNormalBeats;
+        ChallengePressureBeats = challengePressureBeats;
+        ChallengeRecoveryBeats = challengeRecoveryBeats;
+        FallbackSuccessCount = fallbackSuccessCount;
+        UniqueTransitionCount = uniqueTransitionCount;
+        UniqueTripleSequenceCount = uniqueTripleSequenceCount;
+        ImmediateRepeatCount = immediateRepeatCount;
     }
 
     /// <summary>A run is valid only when no contract failure occurred and work was done.</summary>

@@ -28,6 +28,7 @@ public static class FairnessSimulationRunner
         RunBand("Early", 0f, balance, layout);
         RunBand("Medium", 60f, balance, layout);
         RunBand("High", 120f, balance, layout);
+        RunBand("Maximum", 300f, balance, layout);
     }
 
     private static void RunBand(string label, float aliveTime, GameBalanceConfig balance, TrackLayoutConfig layout)
@@ -57,12 +58,13 @@ public static class FairnessSimulationRunner
         RunPatternBand("Early", 0f, set, balance, layout);
         RunPatternBand("Medium", 60f, set, balance, layout);
         RunPatternBand("High", 120f, set, balance, layout);
+        RunPatternBand("Maximum", 300f, set, balance, layout);
     }
 
     private static void RunPatternBand(string label, float aliveTime, ObstaclePatternSet set, GameBalanceConfig balance, TrackLayoutConfig layout)
     {
         PatternSimulationResult result = new PatternSimulation().Run(set, balance, layout, Seed, ScenarioCount, aliveTime);
-        Debug.Log($"[PatternSimulation:{label}] seed={Seed} beats={result.Beats} spawned={result.ObstaclesSpawned} groupsAccepted={result.GroupsAccepted} groupsRejected={result.GroupsRejected} failures={result.Failures} families=Sgl{result.SingleCount}/Alt{result.AlternatingCount}/Dbl{result.DoubleLaneBlockCount}/Stg{result.StaggeredCount}/Dpt{result.DepthLaneComboCount} valid={result.IsValid}");
+        Debug.Log($"[PatternSimulation:{label}] seed={Seed} beats={result.Beats} spawned={result.ObstaclesSpawned} groupsAccepted={result.GroupsAccepted} groupsRejected={result.GroupsRejected} fallbackSuccess={result.FallbackSuccessCount} failures={result.Failures} families=Sgl{result.SingleCount}/Alt{result.AlternatingCount}/Dbl{result.DoubleLaneBlockCount}/Stg{result.StaggeredCount}/Dpt{result.DepthLaneComboCount} challenge=N{result.ChallengeNormalBeats}/P{result.ChallengePressureBeats}/R{result.ChallengeRecoveryBeats} variety=transitions{result.UniqueTransitionCount}/triples{result.UniqueTripleSequenceCount}/repeats{result.ImmediateRepeatCount} valid={result.IsValid}");
     }
 }
 #endif

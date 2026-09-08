@@ -70,6 +70,7 @@ public class ObstacleSpawner : MonoBehaviour
     private DeterministicRandom deterministicRandom;
     private IRandomSource randomSource;
     private PatternDirector patternDirector;
+    private ChallengeDirector challengeDirector;
     private readonly List<PatternSpawnRequest> beatRequests = new List<PatternSpawnRequest>(4);
     private readonly List<FairnessObstacleState> groupCandidates = new List<FairnessObstacleState>(4);
     private readonly List<ResolvedPlacement> resolvedPlacements = new List<ResolvedPlacement>(4);
@@ -122,6 +123,7 @@ public class ObstacleSpawner : MonoBehaviour
         deterministicRandom = useDeterministicSeedForTesting ? new DeterministicRandom(deterministicSeed) : null;
         randomSource = deterministicRandom != null ? (IRandomSource)deterministicRandom : UnityRandomSource.Shared;
         patternDirector = new PatternDirector(ResolvePatternSet());
+        challengeDirector = new ChallengeDirector(gameBalanceConfig ? gameBalanceConfig.GetChallengeConfig() : ChallengeConfig.Default);
         EnsureLaneArrays();
     }
 
@@ -188,7 +190,12 @@ public class ObstacleSpawner : MonoBehaviour
         }
 
         float difficulty = gc != null ? gc.GetDifficultyProgress() : 0f;
-        patternDirector.TickBeat(difficulty, randomSource, beatRequests);
+
+        // The challenge layer only reshapes the difficulty signal PatternSelector already
+        // gates and weights patterns on -- it never touches speed, spawn interval, reaction
+        // time, or fairness. See ChallengeDirector for the NORMAL/PRESSURE/RECOVERY sequencing.
+        float effectiveDifficulty = challengeDirector != null ? challengeDirector.Advance(difficulty, randomSource) : difficulty;
+        patternDirector.TickBeat(effectiveDifficulty, randomSource, beatRequests);
 
         if (beatRequests.Count == 0)
         {
@@ -270,7 +277,7 @@ public class ObstacleSpawner : MonoBehaviour
             InstantiateObstacle(placement.Lane, placement.SpawnZ, placement.DepthIndex, speed);
         }
 
-        DebugLane($"spawn pattern group x{resolvedPlacements.Count} ({patternDirector.LastSelectedType}) | {FormatLaneStates()}");
+        DebugLane($"spawn pattern group x{resolvedPlacements.Count} ({patternDirector.LastSelectedType}) | challenge {(challengeDirector != null ? challengeDirector.State : ChallengeState.Normal)} | {FormatLaneStates()}");
     }
 
     private void EnsureKillOnHit(GameObject obstacleInstance)
