@@ -27,7 +27,6 @@ public class ResultsController : MonoBehaviour
     private const string ProgressionSummaryLabelName = "ProgressionSummaryText";
     private const string ResultStatusLabelName = "ResultStatusText";
     private const string GameOverTitleName = "GameOverTitle";
-    private const string BestScoreKey = "BEST_SCORE";
 
     [Header("UI Auto-Build Settings")]
     [SerializeField] private Vector2 referenceResolution = new Vector2(1920f, 1080f);
@@ -934,7 +933,9 @@ public class ResultsController : MonoBehaviour
     private void UpdateScoreLabels()
     {
         int finalScore = 0;
-        int storedBest = PlayerPrefs.GetInt(BestScoreKey, 0);
+        // Best score is owned by the local competition layer (shared BEST_SCORE store), so
+        // Results reads the same personal record the leaderboard persists.
+        int storedBest = CompetitionProfile.HighestScore;
         int snapshotBest = storedBest;
 
         if (ScoreSnapshot.HasValue)
@@ -950,11 +951,12 @@ public class ResultsController : MonoBehaviour
             ScoreSnapshot.HasValue && ScoreSnapshot.LastRunSetNewBest,
             ScoreSnapshot.LastLossReason);
 
-        // ✅ حفظ مضمون
-        if (bestScore != storedBest)
+        // Safety net: if Results was reached without GameController submitting (e.g. a direct
+        // scene load), persist the resolved best through the same competition store so the
+        // personal record is never lost. GameController remains the authoritative submitter.
+        if (bestScore > storedBest)
         {
-            PlayerPrefs.SetInt(BestScoreKey, bestScore);
-            PlayerPrefs.Save();
+            new PlayerPrefsCompetitionRecordStore().Save(new CompetitionRecords(bestScore));
         }
 
         if (finalScoreText)

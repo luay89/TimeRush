@@ -303,14 +303,13 @@ public class GameController : MonoBehaviour
         resultsSceneLoadRequested = true;
         GameFeedbackSignals.RaiseGameOver();
 
-        // BestScore is updated live for HUD feedback; the persisted value preserves whether this run beat its starting record.
-        int persistedBestScore = PlayerPrefs.GetInt(BestScoreKey, 0);
-        bool setNewBest = CurrentScore > persistedBestScore;
-        if (setNewBest)
-        {
-            BestScore = CurrentScore;
-            PlayerPrefs.SetInt(BestScoreKey, BestScore);
-        }
+        // Submit the run through the local competition leaderboard. This is the single
+        // authoritative point where the highest-score personal record is updated; it shares
+        // the BEST_SCORE store so HUD/Results best score never diverges, and reports whether
+        // this run set a new personal record for retention feedback. No networking is involved.
+        CompetitionRecords.Submission submission = CompetitionProfile.SubmitRun(CurrentScore);
+        bool setNewBest = submission.IsNewRecord;
+        BestScore = submission.Records.HighestScore;
 
         PlayerPrefs.Save();
         // Record the completed run into cross-run progression totals. A continued run is
