@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 /// <summary>
 /// Converts persisted run data into player-facing Results copy without coupling display policy to scene construction.
@@ -41,5 +42,41 @@ public static class ResultsPresentation
         string rankName = string.IsNullOrEmpty(rank.name) ? "—" : rank.name;
 
         return $"RANK {rankName}   //   RUNS {runs}   //   LIFETIME {lifetime}";
+    }
+
+    /// <summary>
+    /// Builds the next-rank progression line from a pure <see cref="RankProgressInfo"/>. The top rank
+    /// is shown cleanly as MAX RANK; otherwise it shows the next rank, points remaining, and percent.
+    /// </summary>
+    public static string BuildRankProgress(RankProgressInfo info)
+    {
+        if (info.IsMaxRank)
+        {
+            string name = string.IsNullOrEmpty(info.CurrentRankName) ? "—" : info.CurrentRankName;
+            return $"RANK {name}   //   MAX RANK";
+        }
+
+        int percent = (int)Math.Round(Math.Max(0f, Math.Min(1f, info.Progress01)) * 100.0);
+        string nextName = string.IsNullOrEmpty(info.NextRankName) ? "—" : info.NextRankName;
+        return $"NEXT {nextName}   //   {info.PointsToNext} PTS TO GO   //   {percent}%";
+    }
+
+    /// <summary>
+    /// Builds the milestone callout for any milestones unlocked on this Results visit. Returns an empty
+    /// string when nothing new was unlocked so the caller can hide the line.
+    /// </summary>
+    public static string BuildMilestoneCallout(IReadOnlyList<string> newlyUnlockedTitles)
+    {
+        if (newlyUnlockedTitles == null || newlyUnlockedTitles.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        if (newlyUnlockedTitles.Count == 1)
+        {
+            return $"MILESTONE   //   {newlyUnlockedTitles[0]}";
+        }
+
+        return $"MILESTONES   //   {string.Join("   •   ", newlyUnlockedTitles)}";
     }
 }

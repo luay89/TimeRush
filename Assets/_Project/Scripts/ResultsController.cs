@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.EventSystems;
@@ -25,6 +26,8 @@ public class ResultsController : MonoBehaviour
     private const string FinalScoreLabelName = "FinalScoreText";
     private const string BestScoreLabelName = "BestScoreText";
     private const string ProgressionSummaryLabelName = "ProgressionSummaryText";
+    private const string RankProgressLabelName = "RankProgressText";
+    private const string MilestoneLabelName = "MilestoneText";
     private const string ResultStatusLabelName = "ResultStatusText";
     private const string GameOverTitleName = "GameOverTitle";
 
@@ -40,6 +43,8 @@ public class ResultsController : MonoBehaviour
     [SerializeField] private TextMeshProUGUI resultStatusText;
     [SerializeField] private TextMeshProUGUI gameOverTitle;
     [SerializeField] private TextMeshProUGUI progressionSummaryText;
+    [SerializeField] private TextMeshProUGUI rankProgressText;
+    [SerializeField] private TextMeshProUGUI milestoneText;
     [SerializeField, Tooltip("Optional rewarded-ad provider. If omitted, ResultsController searches active/persistent objects for an IRewardedAdService implementation.")]
     private MonoBehaviour rewardedAdServiceSource;
 
@@ -752,6 +757,8 @@ public class ResultsController : MonoBehaviour
         resultStatusText = resultStatusText ? resultStatusText : CreateResultStatusLabel(canvasTransform);
         ConfigureResultStatusLabel(resultStatusText);
         EnsureProgressionSummaryLabel(canvasTransform);
+        EnsureRankProgressLabel(canvasTransform);
+        EnsureMilestoneLabel(canvasTransform);
     }
 
     private void EnsureProgressionSummaryLabel(Transform canvasTransform)
@@ -772,6 +779,42 @@ public class ResultsController : MonoBehaviour
         ConfigureProgressionSummaryLabel(progressionSummaryText);
     }
 
+    private void EnsureRankProgressLabel(Transform canvasTransform)
+    {
+        if (!rankProgressText)
+        {
+            // Flow directly beneath the progression summary line in the same layout column.
+            Transform reference = progressionSummaryText ? progressionSummaryText.transform : (bestScoreText ? bestScoreText.transform : null);
+            Transform parent = reference ? reference.parent : canvasTransform;
+            rankProgressText = CreateLabel(parent, RankProgressLabelName, new Vector2(0f, -555f), 28f, string.Empty, true);
+
+            if (reference && rankProgressText.transform.parent == reference.parent)
+            {
+                rankProgressText.transform.SetSiblingIndex(reference.GetSiblingIndex() + 1);
+            }
+        }
+
+        ConfigureProgressionSummaryLabel(rankProgressText);
+    }
+
+    private void EnsureMilestoneLabel(Transform canvasTransform)
+    {
+        if (!milestoneText)
+        {
+            // Sits last in the progression block; hidden (empty text) unless a milestone unlocks.
+            Transform reference = rankProgressText ? rankProgressText.transform : (progressionSummaryText ? progressionSummaryText.transform : null);
+            Transform parent = reference ? reference.parent : canvasTransform;
+            milestoneText = CreateLabel(parent, MilestoneLabelName, new Vector2(0f, -605f), 28f, string.Empty, true);
+
+            if (reference && milestoneText.transform.parent == reference.parent)
+            {
+                milestoneText.transform.SetSiblingIndex(reference.GetSiblingIndex() + 1);
+            }
+        }
+
+        ConfigureMilestoneLabel(milestoneText);
+    }
+
     private static void ConfigureProgressionSummaryLabel(TextMeshProUGUI label)
     {
         if (!label)
@@ -780,6 +823,20 @@ public class ResultsController : MonoBehaviour
         }
 
         label.color = new Color(0.62f, 0.82f, 1f, 1f);
+        label.characterSpacing = 1.5f;
+        label.enableWordWrapping = false;
+        label.raycastTarget = false;
+    }
+
+    private static void ConfigureMilestoneLabel(TextMeshProUGUI label)
+    {
+        if (!label)
+        {
+            return;
+        }
+
+        // A warm accent distinguishes a freshly unlocked milestone while keeping the existing style.
+        label.color = new Color(1f, 0.72f, 0.28f, 1f);
         label.characterSpacing = 1.5f;
         label.enableWordWrapping = false;
         label.raycastTarget = false;
@@ -985,6 +1042,52 @@ public class ResultsController : MonoBehaviour
             ProgressionModel progression = ProgressionProfile.Load();
             ProgressionConfig.RankResult rank = ResolveProgressionConfig().ResolveRank(bestScore);
             progressionSummaryText.text = ResultsPresentation.BuildProgressionSummary(progression, rank);
+        }
+
+        UpdateRankAndMilestones(bestScore);
+    }
+
+    /// <summary>
+    /// Presents next-rank progression and evaluates skill-based milestones from the just-finished run.
+    /// Results is shown after every death (including the intermediate death before a Continue), so the
+    /// milestone bitmask is idempotent: the second Results visit of one logical run unlocks nothing new.
+    /// </summary>
+    private void UpdateRankAndMilestones(int bestScore)
+    {
+        ProgressionConfig config = ResolveProgressionConfig();
+
+        if (rankProgressText)
+        {
+            RankProgressInfo info = RankProgression.Evaluate(config, bestScore);
+            rankProgressText.text = ResultsPresentation.BuildRankProgress(info);
+        }
+
+        int rankIndex = config != null ? config.ResolveRank(bestScore).index : 0;
+        bool setNewBest = ScoreSnapshot.HasValue && ScoreSnapshot.LastRunSetNewBest;
+        MilestoneFacts facts = new MilestoneFacts(
+            ProgressionProfile.TotalRuns,
+            bestScore,
+            rankIndex,
+            setNewBest);
+
+        MilestoneState.Evaluation evaluation = MilestoneProfile.EvaluateAndPersist(facts);
+
+        if (milestoneText)
+        {
+            if (evaluation.HasNewUnlocks)
+            {
+                List<string> titles = new List<string>(evaluation.NewlyUnlocked.Length);
+                foreach (MilestoneId id in evaluation.NewlyUnlocked)
+                {
+                    titles.Add(MilestoneCatalog.TitleOf(id));
+                }
+
+                milestoneText.text = ResultsPresentation.BuildMilestoneCallout(titles);
+            }
+            else
+            {
+                milestoneText.text = string.Empty;
+            }
         }
     }
 

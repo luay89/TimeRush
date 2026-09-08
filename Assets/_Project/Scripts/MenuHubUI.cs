@@ -117,6 +117,17 @@ public class MenuHubUI : MonoBehaviour
         meta.style.unityTextAlign = TextAnchor.MiddleRight;
         header.Add(meta);
 
+        // Surface next-rank progress (or MAX RANK) as a single quiet line beneath the meta summary.
+        var rankProgress = RankProgression.Evaluate(progressionConfig, bestScore);
+        string rankProgressText = rankProgress.IsMaxRank
+            ? "MAX RANK"
+            : $"NEXT {rankProgress.NextRankName}   //   {rankProgress.PointsToNext} TO GO";
+        var rankProgressLabel = new Label(rankProgressText);
+        rankProgressLabel.style.color = Muted;
+        rankProgressLabel.style.fontSize = 12f;
+        rankProgressLabel.style.unityTextAlign = TextAnchor.MiddleRight;
+        header.Add(rankProgressLabel);
+
         var titleBlock = new VisualElement();
         titleBlock.style.marginTop = 32f;
         titleBlock.style.marginBottom = 0f;
