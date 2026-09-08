@@ -55,19 +55,19 @@ public class KillOnHit : MonoBehaviour
     {
         if (!other)
         {
-            DebugMessage($"{channel}: ignored because other is null");
+            if (debugLogs) DebugMessage($"{channel}: ignored because other is null");
             return;
         }
 
-        DebugMessage($"{channel}: contact with {other.name} (tag: {other.tag})");
+        if (debugLogs) DebugMessage($"{channel}: contact with {other.name} (tag: {other.tag})");
 
         if (!other.CompareTag(targetTag))
         {
-            DebugMessage($"{channel}: tag mismatch, expected '{targetTag}'");
+            if (debugLogs) DebugMessage($"{channel}: tag mismatch, expected '{targetTag}'");
             return;
         }
 
-        DebugMessage($"{channel}: tag matched '{targetTag}'");
+        if (debugLogs) DebugMessage($"{channel}: tag matched '{targetTag}'");
 
         var controller = cachedController;
 
@@ -85,7 +85,7 @@ public class KillOnHit : MonoBehaviour
 
         if (controller.IsPlayerInvulnerable)
         {
-            DebugMessage($"{channel}: player invulnerable, ignoring hit");
+            if (debugLogs) DebugMessage($"{channel}: player invulnerable, ignoring hit");
             return;
         }
 
@@ -98,12 +98,16 @@ public class KillOnHit : MonoBehaviour
 
         nearMissState.MarkCollision();
 
-        DebugMessage($"{channel}: using controller {controller.name}");
+        if (debugLogs) DebugMessage($"{channel}: using controller {controller.name}");
         GameFeedbackSignals.RaiseObstacleCollision(new ObstacleCollisionFeedback(transform.position));
-        DebugMessage($"{channel}: invoking TriggerGameOver");
+        if (debugLogs) DebugMessage($"{channel}: invoking TriggerGameOver");
         controller.TriggerGameOver(this);
     }
 
+    // Guarded at every call site above (not just inside DebugMessage) so the interpolated
+    // string is never built when diagnostics are disabled -- this method fires on every
+    // player-obstacle collision/trigger event, so an unconditional allocation here would be
+    // a real per-hit GC cost in normal gameplay.
     private void DebugMessage(string message)
     {
         if (!debugLogs)

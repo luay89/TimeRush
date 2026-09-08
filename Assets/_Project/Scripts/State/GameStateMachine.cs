@@ -7,6 +7,9 @@ using UnityEngine.SceneManagement;
 /// </summary>
 public sealed class GameStateMachine : MonoBehaviour
 {
+    [SerializeField, Tooltip("Stable frame-rate cap applied once at boot (device builds only) so frame pacing/power draw stay predictable regardless of the device's native display refresh rate. Does not affect gameplay timing, which is already Time.deltaTime based.")]
+    private int targetFrameRate = 60;
+
     public static GameStateMachine Instance { get; private set; }
     public static bool HasInstance => Instance != null;
     public static bool IsGameplayInputAllowed => Instance == null || Instance.CurrentState == GameStateKind.Playing;
@@ -31,6 +34,11 @@ public sealed class GameStateMachine : MonoBehaviour
         ownsSingleton = true;
         EnsureStateModel();
         DontDestroyOnLoad(gameObject);
+
+#if !UNITY_EDITOR
+        // Editor Play Mode intentionally keeps its own frame pacing/profiling behavior.
+        Application.targetFrameRate = Mathf.Max(1, targetFrameRate);
+#endif
     }
 
     private void OnEnable()

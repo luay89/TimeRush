@@ -277,7 +277,12 @@ public class ObstacleSpawner : MonoBehaviour
             InstantiateObstacle(placement.Lane, placement.SpawnZ, placement.DepthIndex, speed);
         }
 
-        DebugLane($"spawn pattern group x{resolvedPlacements.Count} ({patternDirector.LastSelectedType}) | challenge {(challengeDirector != null ? challengeDirector.State : ChallengeState.Normal)} | {FormatLaneStates()}");
+        // Guarded at the call site (not just inside DebugLane) so the interpolated string and
+        // FormatLaneStates() StringBuilder are never built when diagnostics are disabled.
+        if (debugLaneDecisions)
+        {
+            DebugLane($"spawn pattern group x{resolvedPlacements.Count} ({patternDirector.LastSelectedType}) | challenge {(challengeDirector != null ? challengeDirector.State : ChallengeState.Normal)} | {FormatLaneStates()}");
+        }
     }
 
     private void EnsureKillOnHit(GameObject obstacleInstance)
@@ -341,7 +346,12 @@ public class ObstacleSpawner : MonoBehaviour
         }
 
         InstantiateObstacle(laneIndex, spawnZ, depthIndex, speed);
-        DebugLane($"spawn lane {laneIndex}, depth {depthIndex} | {FormatLaneStates()}" );
+
+        if (debugLaneDecisions)
+        {
+            DebugLane($"spawn lane {laneIndex}, depth {depthIndex} | {FormatLaneStates()}");
+        }
+
         return true;
     }
 
@@ -411,7 +421,7 @@ public class ObstacleSpawner : MonoBehaviour
             minDepthSeparation);
 
         FairnessDecision decision = fairnessValidator.Evaluate(context);
-        if (!decision.IsAllowed)
+        if (!decision.IsAllowed && debugLaneDecisions)
         {
             DebugLane($"reject lane {laneIndex} (temporal {decision.Reason})");
         }
@@ -513,19 +523,19 @@ public class ObstacleSpawner : MonoBehaviour
 
             if (fairnessValidator.IsImmediateLaneRepeat(candidate, lastLaneIndex, preventSameLaneTwice))
             {
-                DebugLane($"reject lane {candidate} (repeat)");
+                if (debugLaneDecisions) DebugLane($"reject lane {candidate} (repeat)");
                 continue;
             }
 
             if (IsLaneTooClose(candidate))
             {
-                DebugLane($"reject lane {candidate} (min gap)");
+                if (debugLaneDecisions) DebugLane($"reject lane {candidate} (min gap)");
                 continue;
             }
 
             if (IsLaneBlocked(candidate))
             {
-                DebugLane($"reject lane {candidate} (blocked)");
+                if (debugLaneDecisions) DebugLane($"reject lane {candidate} (blocked)");
                 continue;
             }
 
@@ -533,19 +543,19 @@ public class ObstacleSpawner : MonoBehaviour
             {
                 if (ViolatesReactionTime(candidate, now, spawnSpeed))
                 {
-                    DebugLane($"reject lane {candidate} (reaction)");
+                    if (debugLaneDecisions) DebugLane($"reject lane {candidate} (reaction)");
                     continue;
                 }
 
                 if (WouldExhaustSafeLanes(candidate, spawnSpeed))
                 {
-                    DebugLane($"reject lane {candidate} (all lanes would block)");
+                    if (debugLaneDecisions) DebugLane($"reject lane {candidate} (all lanes would block)");
                     continue;
                 }
 
                 if (ViolatesLockRule(candidate, now))
                 {
-                    DebugLane($"reject lane {candidate} (lock rule)");
+                    if (debugLaneDecisions) DebugLane($"reject lane {candidate} (lock rule)");
                     continue;
                 }
             }
@@ -574,7 +584,12 @@ public class ObstacleSpawner : MonoBehaviour
 
         var selectionPool = overdueLaneIndices.Count > 0 ? overdueLaneIndices : validLaneIndices;
         laneIndex = selectionPool[NextRandomIndex(selectionPool.Count)];
-        DebugLane($"accept lane {laneIndex} | overdue {overdueLaneIndices.Count}/{validLaneIndices.Count}");
+
+        if (debugLaneDecisions)
+        {
+            DebugLane($"accept lane {laneIndex} | overdue {overdueLaneIndices.Count}/{validLaneIndices.Count}");
+        }
+
         return true;
     }
 
