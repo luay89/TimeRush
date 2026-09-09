@@ -389,6 +389,7 @@ MonoBehaviour:
   offset: {x: 0, y: 8.5, z: -18}
   lookAtOffset: {x: 0, y: 2.5, z: 3.5}
   followSpeed: 8
+  feedbackConfig: {fileID: 11400000, guid: 26f572c822a14bf9ba183f47d0cf311d, type: 2}
 --- !u!114 &751755600
 MonoBehaviour:
   m_ObjectHideFlags: 0
