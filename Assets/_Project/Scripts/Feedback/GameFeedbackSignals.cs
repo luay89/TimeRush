@@ -38,4 +38,5 @@ public sealed class GameFeedbackSignals : MonoBehaviour
     public static void RaiseRunPaused() => Instance?.Events.RaiseRunPaused();
     public static void RaiseRunResumed() => Instance?.Events.RaiseRunResumed();
     public static void RaisePaceMilestone(PaceMilestoneFeedback payload) => Instance?.Events.RaisePaceMilestone(payload);
+    public static void RaiseChallengeStateChanged(ChallengeStateChangedFeedback payload) => Instance?.Events.RaiseChallengeStateChanged(payload);
 }

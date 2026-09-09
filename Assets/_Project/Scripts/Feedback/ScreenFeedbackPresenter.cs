@@ -92,7 +92,9 @@ public sealed class ScreenFeedbackPresenter : MonoBehaviour
 
     private void HandleNearMiss(NearMissFeedback payload)
     {
-        BeginFlash(feedbackConfig ? feedbackConfig.nearMissColor : Color.cyan, feedbackConfig ? feedbackConfig.nearMissFlashOpacity : 0f);
+        float boost = feedbackConfig ? FlowFeedbackScaling.ComputeBoost(payload.FlowMultiplier, feedbackConfig.flowFeedbackReferenceMultiplier, feedbackConfig.flowFeedbackMaxBoost) : 1f;
+        float opacity = Mathf.Clamp01((feedbackConfig ? feedbackConfig.nearMissFlashOpacity : 0f) * boost);
+        BeginFlash(feedbackConfig ? feedbackConfig.nearMissColor : Color.cyan, opacity);
     }
 
     private void HandleCollision(ObstacleCollisionFeedback payload)

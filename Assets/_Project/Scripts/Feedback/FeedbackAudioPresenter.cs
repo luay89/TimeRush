@@ -48,6 +48,7 @@ public sealed class FeedbackAudioPresenter : MonoBehaviour
         events.RunPaused += HandlePause;
         events.RunResumed += HandleResume;
         events.PaceMilestoneReached += HandlePaceMilestone;
+        events.ChallengeStateChanged += HandleChallengeStateChanged;
     }
 
     private void Unsubscribe()
@@ -67,6 +68,7 @@ public sealed class FeedbackAudioPresenter : MonoBehaviour
         events.RunPaused -= HandlePause;
         events.RunResumed -= HandleResume;
         events.PaceMilestoneReached -= HandlePaceMilestone;
+        events.ChallengeStateChanged -= HandleChallengeStateChanged;
     }
 
     private void HandleRunStarted() => Play(feedbackConfig ? feedbackConfig.runStartClip : null, feedbackConfig ? feedbackConfig.runVolume : 0f);
@@ -78,6 +80,25 @@ public sealed class FeedbackAudioPresenter : MonoBehaviour
     private void HandlePause() => Play(feedbackConfig ? feedbackConfig.pauseClip : null, feedbackConfig ? feedbackConfig.pauseVolume : 0f);
     private void HandleResume() => Play(feedbackConfig ? feedbackConfig.resumeClip : null, feedbackConfig ? feedbackConfig.pauseVolume : 0f);
     private void HandlePaceMilestone(PaceMilestoneFeedback payload) => Play(feedbackConfig ? feedbackConfig.paceMilestoneClip : null, feedbackConfig ? feedbackConfig.runVolume : 0f);
+
+    // Subtle anticipation/relief cue only: fires once per NORMAL->PRESSURE or ->RECOVERY
+    // transition (ObstacleSpawner only raises this on an actual state change, never per-beat).
+    // A missing clip stays silent, matching every other optional-clip hook in this presenter.
+    private void HandleChallengeStateChanged(ChallengeStateChangedFeedback payload)
+    {
+        AudioClip clip = null;
+
+        if (payload.State == ChallengeState.Pressure)
+        {
+            clip = feedbackConfig ? feedbackConfig.pressureBeginClip : null;
+        }
+        else if (payload.State == ChallengeState.Recovery)
+        {
+            clip = feedbackConfig ? feedbackConfig.recoveryBeginClip : null;
+        }
+
+        Play(clip, feedbackConfig ? feedbackConfig.runVolume : 0f);
+    }
 
     private void PlayMovement(AudioClip clip, float volume)
     {

@@ -54,10 +54,22 @@ public sealed class FeedbackConfig : ScriptableObject
     [Header("Pace")]
     [Range(0.05f, 1f)] public float paceMilestoneStep = 0.25f;
 
+    [Header("Flow Escalation")]
+    [Tooltip("Flow multiplier at which near-miss feedback (shake/flash/VFX) reaches its full boost.")]
+    [Range(1, 6)] public int flowFeedbackReferenceMultiplier = 4;
+    [Tooltip("Multiplicative near-miss feedback boost applied once Flow reaches the reference multiplier.")]
+    [Range(1f, 2f)] public float flowFeedbackMaxBoost = 1.5f;
+
+    [Header("Pacing Anticipation Audio")]
+    public AudioClip pressureBeginClip;
+    public AudioClip recoveryBeginClip;
+
     private void OnValidate()
     {
         pooledPulseCount = Mathf.Clamp(pooledPulseCount, 1, 6);
         movementAudioCooldown = Mathf.Max(0f, movementAudioCooldown);
         paceMilestoneStep = Mathf.Max(0.05f, paceMilestoneStep);
+        flowFeedbackReferenceMultiplier = Mathf.Max(1, flowFeedbackReferenceMultiplier);
+        flowFeedbackMaxBoost = Mathf.Max(1f, flowFeedbackMaxBoost);
     }
 }

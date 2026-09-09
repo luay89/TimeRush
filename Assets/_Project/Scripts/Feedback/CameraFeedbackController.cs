@@ -77,7 +77,9 @@ public sealed class CameraFeedbackController : MonoBehaviour
 
     private void HandleNearMiss(NearMissFeedback payload)
     {
-        BeginShake(feedbackConfig ? feedbackConfig.nearMissShakeStrength : 0f, feedbackConfig ? feedbackConfig.nearMissShakeDuration : 0f);
+        float boost = feedbackConfig ? FlowFeedbackScaling.ComputeBoost(payload.FlowMultiplier, feedbackConfig.flowFeedbackReferenceMultiplier, feedbackConfig.flowFeedbackMaxBoost) : 1f;
+        float strength = (feedbackConfig ? feedbackConfig.nearMissShakeStrength : 0f) * boost;
+        BeginShake(strength, feedbackConfig ? feedbackConfig.nearMissShakeDuration : 0f);
     }
 
     private void HandleCollision(ObstacleCollisionFeedback payload)

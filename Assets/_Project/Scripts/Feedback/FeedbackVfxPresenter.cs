@@ -87,7 +87,9 @@ public sealed class FeedbackVfxPresenter : MonoBehaviour
 
     private void HandleNearMiss(NearMissFeedback payload)
     {
-        Emit(payload.Position, feedbackConfig ? feedbackConfig.nearMissColor : Color.cyan, feedbackConfig ? feedbackConfig.nearMissParticleCount : 0, feedbackConfig ? feedbackConfig.nearMissParticleLifetime : 0f);
+        float boost = feedbackConfig ? FlowFeedbackScaling.ComputeBoost(payload.FlowMultiplier, feedbackConfig.flowFeedbackReferenceMultiplier, feedbackConfig.flowFeedbackMaxBoost) : 1f;
+        int particleCount = feedbackConfig ? Mathf.RoundToInt(feedbackConfig.nearMissParticleCount * boost) : 0;
+        Emit(payload.Position, feedbackConfig ? feedbackConfig.nearMissColor : Color.cyan, particleCount, feedbackConfig ? feedbackConfig.nearMissParticleLifetime : 0f);
     }
 
     private void HandleCollision(ObstacleCollisionFeedback payload)

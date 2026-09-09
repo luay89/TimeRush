@@ -71,6 +71,7 @@ public class ObstacleSpawner : MonoBehaviour
     private IRandomSource randomSource;
     private PatternDirector patternDirector;
     private ChallengeDirector challengeDirector;
+    private ChallengeState lastNotifiedChallengeState = ChallengeState.Normal;
     private readonly List<PatternSpawnRequest> beatRequests = new List<PatternSpawnRequest>(4);
     private readonly List<FairnessObstacleState> groupCandidates = new List<FairnessObstacleState>(4);
     private readonly List<ResolvedPlacement> resolvedPlacements = new List<ResolvedPlacement>(4);
@@ -124,6 +125,7 @@ public class ObstacleSpawner : MonoBehaviour
         randomSource = deterministicRandom != null ? (IRandomSource)deterministicRandom : UnityRandomSource.Shared;
         patternDirector = new PatternDirector(ResolvePatternSet());
         challengeDirector = new ChallengeDirector(gameBalanceConfig ? gameBalanceConfig.GetChallengeConfig() : ChallengeConfig.Default);
+        lastNotifiedChallengeState = challengeDirector.State;
         EnsureLaneArrays();
     }
 
@@ -195,6 +197,16 @@ public class ObstacleSpawner : MonoBehaviour
         // gates and weights patterns on -- it never touches speed, spawn interval, reaction
         // time, or fairness. See ChallengeDirector for the NORMAL/PRESSURE/RECOVERY sequencing.
         float effectiveDifficulty = challengeDirector != null ? challengeDirector.Advance(difficulty, randomSource) : difficulty;
+
+        // Presentation-only: tells feedback presenters about a pacing transition so players get a
+        // subtle anticipation/relief cue. Fires only on an actual state change, never per-beat, and
+        // never influences difficulty, patterns, or fairness.
+        if (challengeDirector != null && challengeDirector.State != lastNotifiedChallengeState)
+        {
+            lastNotifiedChallengeState = challengeDirector.State;
+            GameFeedbackSignals.RaiseChallengeStateChanged(new ChallengeStateChangedFeedback(lastNotifiedChallengeState));
+        }
+
         patternDirector.TickBeat(effectiveDifficulty, randomSource, beatRequests);
 
         if (beatRequests.Count == 0)

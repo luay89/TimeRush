@@ -60,3 +60,17 @@ public readonly struct PaceMilestoneFeedback
         PaceMultiplier = paceMultiplier;
     }
 }
+
+/// <summary>
+/// Raised only when ChallengeDirector's NORMAL/PRESSURE/RECOVERY state actually changes, so
+/// presenters can give the player a subtle anticipation/relief cue without owning pacing logic.
+/// </summary>
+public readonly struct ChallengeStateChangedFeedback
+{
+    public readonly ChallengeState State;
+
+    public ChallengeStateChangedFeedback(ChallengeState state)
+    {
+        State = state;
+    }
+}

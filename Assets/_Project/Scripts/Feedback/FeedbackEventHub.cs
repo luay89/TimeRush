@@ -14,6 +14,7 @@ public sealed class FeedbackEventHub
     public event Action RunPaused;
     public event Action RunResumed;
     public event Action<PaceMilestoneFeedback> PaceMilestoneReached;
+    public event Action<ChallengeStateChangedFeedback> ChallengeStateChanged;
 
     public void RaisePlayerLaneChanged(PlayerLaneChangedFeedback payload) => PlayerLaneChanged?.Invoke(payload);
     public void RaisePlayerDepthChanged(PlayerDepthChangedFeedback payload) => PlayerDepthChanged?.Invoke(payload);
@@ -24,4 +25,5 @@ public sealed class FeedbackEventHub
     public void RaiseRunPaused() => RunPaused?.Invoke();
     public void RaiseRunResumed() => RunResumed?.Invoke();
     public void RaisePaceMilestone(PaceMilestoneFeedback payload) => PaceMilestoneReached?.Invoke(payload);
+    public void RaiseChallengeStateChanged(ChallengeStateChangedFeedback payload) => ChallengeStateChanged?.Invoke(payload);
 }
