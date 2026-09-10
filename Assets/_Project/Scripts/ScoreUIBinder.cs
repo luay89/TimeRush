@@ -202,7 +202,7 @@ public class ScoreUIBinder : MonoBehaviour
             {
                 float opacity = gc.GetControlHintOpacity();
                 statusLabel.color = new Color(Cyan.r, Cyan.g, Cyan.b, opacity);
-                statusLabel.SetText(opacity > 0.02f ? "A/D  LANE  //  W/S  DEPTH" : string.Empty);
+                statusLabel.SetText(opacity > 0.02f ? "A/D or SWIPE  LANE   //   W/S or SWIPE  DEPTH" : string.Empty);
             }
         }
     }

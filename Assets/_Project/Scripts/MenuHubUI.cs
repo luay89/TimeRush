@@ -249,7 +249,7 @@ public class MenuHubUI : MonoBehaviour
         startButton.RegisterCallback<PointerLeaveEvent>(_ => startButton.style.backgroundColor = Orange);
         actionRow.Add(startButton);
 
-        var hint = new Label("A / D  or  ← / →  //  lane\nW / S  or  ↑ / ↓  //  depth\nSwipe left or right on touch");
+        var hint = new Label("A / D  or  ← / →  //  lane\nW / S  or  ↑ / ↓  //  depth\nSwipe ← / →  lane   //   ↑ / ↓  depth");
         hint.style.color = Muted;
         hint.style.fontSize = 16f;
         hint.style.unityTextAlign = TextAnchor.MiddleRight;
