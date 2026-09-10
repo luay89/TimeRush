@@ -11,6 +11,7 @@ public sealed class PlayerInputSource : MonoBehaviour
 
     private Vector2 pointerDownPosition;
     private bool trackingPointer;
+    private bool swipeDispatchedForTouch;
     private PlayerIntentBuffer laneIntentBuffer;
     private float laneInputBufferSeconds;
 
@@ -80,17 +81,41 @@ public sealed class PlayerInputSource : MonoBehaviour
         {
             pointerDownPosition = touch.position;
             trackingPointer = true;
+            swipeDispatchedForTouch = false;
             return;
         }
 
-        if (!trackingPointer || touch.phase != TouchPhase.Ended)
+        if (!trackingPointer)
         {
             return;
         }
 
-        trackingPointer = false;
-        float threshold = Mathf.Max(32f, Screen.width * 0.08f);
-        Dispatch(PlayerIntent.FromSwipe(touch.position - pointerDownPosition, threshold));
+        if (touch.phase == TouchPhase.Canceled)
+        {
+            trackingPointer = false;
+            return;
+        }
+
+        // Dispatch as soon as the swipe crosses the threshold instead of waiting for the finger
+        // to lift -- same gesture vocabulary and threshold as before, just lower input latency.
+        // Falls back to checking again on Ended so a swipe that only crosses the threshold at
+        // release still registers exactly as it did previously.
+        if (!swipeDispatchedForTouch)
+        {
+            float threshold = Mathf.Max(32f, Screen.width * 0.08f);
+            PlayerIntent intent = PlayerIntent.FromSwipe(touch.position - pointerDownPosition, threshold);
+
+            if (!intent.IsEmpty)
+            {
+                Dispatch(intent);
+                swipeDispatchedForTouch = true;
+            }
+        }
+
+        if (touch.phase == TouchPhase.Ended)
+        {
+            trackingPointer = false;
+        }
     }
 
     private void Dispatch(PlayerIntent intent)
