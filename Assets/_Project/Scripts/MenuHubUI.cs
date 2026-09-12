@@ -108,6 +108,14 @@ public class MenuHubUI : MonoBehaviour
         mark.style.letterSpacing = 4f;
         header.Add(mark);
 
+        var headerInfo = new VisualElement();
+        headerInfo.style.flexDirection = FlexDirection.Column;
+        headerInfo.style.alignItems = Align.FlexEnd;
+        headerInfo.style.justifyContent = Justify.Center;
+        headerInfo.style.flexShrink = 0f;
+        headerInfo.style.maxWidth = 520f;
+        header.Add(headerInfo);
+
         int bestScore = PlayerPrefs.GetInt(BestScoreKey, 0);
         var progression = ProgressionProfile.Load();
         var rank = progressionConfig.ResolveRank(bestScore);
@@ -115,7 +123,7 @@ public class MenuHubUI : MonoBehaviour
         meta.style.color = Muted;
         meta.style.fontSize = 14f;
         meta.style.unityTextAlign = TextAnchor.MiddleRight;
-        header.Add(meta);
+        headerInfo.Add(meta);
 
         // Surface next-rank progress (or MAX RANK) as a single quiet line beneath the meta summary.
         var rankProgress = RankProgression.Evaluate(progressionConfig, bestScore);
@@ -126,7 +134,8 @@ public class MenuHubUI : MonoBehaviour
         rankProgressLabel.style.color = Muted;
         rankProgressLabel.style.fontSize = 12f;
         rankProgressLabel.style.unityTextAlign = TextAnchor.MiddleRight;
-        header.Add(rankProgressLabel);
+        rankProgressLabel.style.marginTop = 2f;
+        headerInfo.Add(rankProgressLabel);
 
         var titleBlock = new VisualElement();
         titleBlock.style.marginTop = 32f;
@@ -251,7 +260,7 @@ public class MenuHubUI : MonoBehaviour
 
         var hint = new Label("A / D  or  ← / →  //  lane\nW / S  or  ↑ / ↓  //  depth\nSwipe ← / →  lane   //   ↑ / ↓  depth");
         hint.style.color = Muted;
-        hint.style.fontSize = 16f;
+        hint.style.fontSize = 15f;
         hint.style.unityTextAlign = TextAnchor.MiddleRight;
         hint.style.marginLeft = 32f;
         hint.style.flexShrink = 1f;
@@ -275,7 +284,7 @@ public class MenuHubUI : MonoBehaviour
         row.style.flexDirection = FlexDirection.Row;
         row.style.justifyContent = Justify.SpaceBetween;
         row.style.alignItems = Align.Center;
-        row.style.minHeight = 36f;
+        row.style.minHeight = 48f;
         row.style.marginTop = 6f;
 
         var label = new Label(labelText);
@@ -287,11 +296,11 @@ public class MenuHubUI : MonoBehaviour
         row.Add(label);
 
         var button = new Button();
-        button.style.width = 110f;
-        button.style.height = 32f;
+        button.style.width = 132f;
+        button.style.height = 44f;
         button.style.flexShrink = 0f;
         button.style.unityFontStyleAndWeight = FontStyle.Bold;
-        button.style.fontSize = 14f;
+        button.style.fontSize = 16f;
         button.style.unityTextAlign = TextAnchor.MiddleCenter;
         button.style.borderTopWidth = 0f;
         button.style.borderBottomWidth = 0f;
