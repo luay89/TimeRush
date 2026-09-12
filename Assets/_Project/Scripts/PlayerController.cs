@@ -169,7 +169,7 @@ public class PlayerController : MonoBehaviour
         visual.localRotation = Quaternion.Slerp(visual.localRotation, targetRotation, 14f * Time.deltaTime);
 
         movementPulse = Mathf.MoveTowards(movementPulse, 0f, 6f * Time.deltaTime);
-        float scale = 1f + movementPulse * 0.075f;
+        float scale = 1f + movementPulse * 0.10f;
         visual.localScale = Vector3.Lerp(visual.localScale, baseVisualScale * scale, 16f * Time.deltaTime);
     }
 
