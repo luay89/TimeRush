@@ -42,6 +42,7 @@ public class ScoreUIBinder : MonoBehaviour
         if (GameFeedbackSignals.HasInstance)
         {
             GameFeedbackSignals.Instance.Events.NearMissTriggered += HandleNearMiss;
+            GameFeedbackSignals.Instance.Events.ChallengeStateChanged += HandleChallengeStateChanged;
         }
 
         if (scoreLabel)
@@ -61,6 +62,7 @@ public class ScoreUIBinder : MonoBehaviour
         if (GameFeedbackSignals.HasInstance)
         {
             GameFeedbackSignals.Instance.Events.NearMissTriggered -= HandleNearMiss;
+            GameFeedbackSignals.Instance.Events.ChallengeStateChanged -= HandleChallengeStateChanged;
         }
     }
 
@@ -219,6 +221,24 @@ public class ScoreUIBinder : MonoBehaviour
         statusLabel.SetText(feedback.FlowMultiplier > 1
             ? string.Format("NEAR MISS  //  +{0}  x{1}", feedback.Award, feedback.FlowMultiplier)
             : string.Format("NEAR MISS  //  +{0}", feedback.Award));
+    }
+
+    private void HandleChallengeStateChanged(ChallengeStateChangedFeedback feedback)
+    {
+        if (!statusLabel)
+        {
+            return;
+        }
+
+        string text = ResultsPresentation.BuildChallengeStatus(feedback.State);
+        if (string.IsNullOrEmpty(text))
+        {
+            return;
+        }
+
+        feedbackTimer = feedbackConfig ? Mathf.Min(feedbackConfig.nearMissStatusDuration, 0.9f) : 0.9f;
+        statusLabel.color = Violet;
+        statusLabel.SetText(text);
     }
 
     private void RefreshBest(GameController gc)

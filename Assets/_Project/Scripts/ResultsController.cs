@@ -28,6 +28,7 @@ public class ResultsController : MonoBehaviour
     private const string ProgressionSummaryLabelName = "ProgressionSummaryText";
     private const string RankProgressLabelName = "RankProgressText";
     private const string MilestoneLabelName = "MilestoneText";
+    private const string NextRunHintLabelName = "NextRunHintText";
     private const string ResultStatusLabelName = "ResultStatusText";
     private const string GameOverTitleName = "GameOverTitle";
 
@@ -45,6 +46,7 @@ public class ResultsController : MonoBehaviour
     [SerializeField] private TextMeshProUGUI progressionSummaryText;
     [SerializeField] private TextMeshProUGUI rankProgressText;
     [SerializeField] private TextMeshProUGUI milestoneText;
+    [SerializeField] private TextMeshProUGUI nextRunHintText;
     [SerializeField, Tooltip("Optional rewarded-ad provider. If omitted, ResultsController searches active/persistent objects for an IRewardedAdService implementation.")]
     private MonoBehaviour rewardedAdServiceSource;
 
@@ -720,6 +722,11 @@ public class ResultsController : MonoBehaviour
             resultStatusText = FindLabel(canvasTransform, ResultStatusLabelName);
         }
 
+        if (!nextRunHintText)
+        {
+            nextRunHintText = FindLabel(canvasTransform, NextRunHintLabelName);
+        }
+
         if (!gameOverTitle)
         {
             var foundTitle = FindLabel(canvasTransform, GameOverTitleName);
@@ -759,6 +766,7 @@ public class ResultsController : MonoBehaviour
         EnsureProgressionSummaryLabel(canvasTransform);
         EnsureRankProgressLabel(canvasTransform);
         EnsureMilestoneLabel(canvasTransform);
+        EnsureNextRunHintLabel(canvasTransform);
     }
 
     private void EnsureProgressionSummaryLabel(Transform canvasTransform)
@@ -815,6 +823,23 @@ public class ResultsController : MonoBehaviour
         ConfigureMilestoneLabel(milestoneText);
     }
 
+    private void EnsureNextRunHintLabel(Transform canvasTransform)
+    {
+        if (!nextRunHintText)
+        {
+            Transform reference = milestoneText ? milestoneText.transform : (rankProgressText ? rankProgressText.transform : null);
+            Transform parent = reference ? reference.parent : canvasTransform;
+            nextRunHintText = CreateLabel(parent, NextRunHintLabelName, new Vector2(0f, -655f), 26f, string.Empty, true);
+
+            if (reference && nextRunHintText.transform.parent == reference.parent)
+            {
+                nextRunHintText.transform.SetSiblingIndex(reference.GetSiblingIndex() + 1);
+            }
+        }
+
+        ConfigureNextRunHintLabel(nextRunHintText);
+    }
+
     private static void ConfigureProgressionSummaryLabel(TextMeshProUGUI label)
     {
         if (!label)
@@ -838,6 +863,19 @@ public class ResultsController : MonoBehaviour
         // A warm accent distinguishes a freshly unlocked milestone while keeping the existing style.
         label.color = new Color(1f, 0.72f, 0.28f, 1f);
         label.characterSpacing = 1.5f;
+        label.enableWordWrapping = false;
+        label.raycastTarget = false;
+    }
+
+    private static void ConfigureNextRunHintLabel(TextMeshProUGUI label)
+    {
+        if (!label)
+        {
+            return;
+        }
+
+        label.color = new Color(0.88f, 0.92f, 1f, 1f);
+        label.characterSpacing = 1.2f;
         label.enableWordWrapping = false;
         label.raycastTarget = false;
     }
@@ -1044,7 +1082,7 @@ public class ResultsController : MonoBehaviour
             progressionSummaryText.text = ResultsPresentation.BuildProgressionSummary(progression, rank);
         }
 
-        UpdateRankAndMilestones(bestScore);
+        UpdateRankAndMilestones(bestScore, finalScore);
     }
 
     /// <summary>
@@ -1052,13 +1090,13 @@ public class ResultsController : MonoBehaviour
     /// Results is shown after every death (including the intermediate death before a Continue), so the
     /// milestone bitmask is idempotent: the second Results visit of one logical run unlocks nothing new.
     /// </summary>
-    private void UpdateRankAndMilestones(int bestScore)
+    private void UpdateRankAndMilestones(int bestScore, int finalScore)
     {
         ProgressionConfig config = ResolveProgressionConfig();
+        RankProgressInfo info = RankProgression.Evaluate(config, bestScore);
 
         if (rankProgressText)
         {
-            RankProgressInfo info = RankProgression.Evaluate(config, bestScore);
             rankProgressText.text = ResultsPresentation.BuildRankProgress(info);
         }
 
@@ -1088,6 +1126,11 @@ public class ResultsController : MonoBehaviour
             {
                 milestoneText.text = string.Empty;
             }
+        }
+
+        if (nextRunHintText)
+        {
+            nextRunHintText.text = ResultsPresentation.BuildNextRunGuidance(finalScore, bestScore, info);
         }
     }
 

@@ -69,4 +69,37 @@ public sealed class ResultsProgressionTests
         Assert.That(a.currentThreshold, Is.EqualTo(b.currentThreshold));
         Assert.That(a.name, Is.EqualTo("VETERAN"));
     }
+
+    [Test]
+    public void BuildNextRunGuidance_BelowBestAndNotMaxRank_ShowsRankAndBestTargets()
+    {
+        var config = ProgressionConfig.CreateDefault();
+        RankProgressInfo info = RankProgression.Evaluate(config, 1500);
+
+        string guidance = ResultsPresentation.BuildNextRunGuidance(1200, 1500, info);
+
+        Assert.That(guidance, Does.Contain("TO VETERAN"));
+        Assert.That(guidance, Does.Contain("+301 TO NEW BEST"));
+        Object.DestroyImmediate(config);
+    }
+
+    [Test]
+    public void BuildNextRunGuidance_MaxRankWithoutBest_ShowsNewBestTarget()
+    {
+        var config = ProgressionConfig.CreateDefault();
+        RankProgressInfo info = RankProgression.Evaluate(config, 12000);
+
+        string guidance = ResultsPresentation.BuildNextRunGuidance(11800, 12000, info);
+
+        Assert.That(guidance, Is.EqualTo("NEXT RUN   //   +201 TO NEW BEST"));
+        Object.DestroyImmediate(config);
+    }
+
+    [Test]
+    public void BuildChallengeStatus_FormatsOnlyPressureAndRecovery()
+    {
+        Assert.That(ResultsPresentation.BuildChallengeStatus(ChallengeState.Pressure), Is.EqualTo("CHALLENGE  //  PRESSURE"));
+        Assert.That(ResultsPresentation.BuildChallengeStatus(ChallengeState.Recovery), Is.EqualTo("CHALLENGE  //  RECOVERY"));
+        Assert.That(ResultsPresentation.BuildChallengeStatus(ChallengeState.Normal), Is.EqualTo(string.Empty));
+    }
 }

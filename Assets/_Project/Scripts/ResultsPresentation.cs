@@ -79,4 +79,50 @@ public static class ResultsPresentation
 
         return $"MILESTONES   //   {string.Join("   •   ", newlyUnlockedTitles)}";
     }
+
+    /// <summary>
+    /// Builds a concise, reliable next-run target from data already tracked by the game.
+    /// It never invents metrics: only next-rank distance and personal-best distance are used.
+    /// </summary>
+    public static string BuildNextRunGuidance(int finalScore, int bestScore, RankProgressInfo rankInfo)
+    {
+        int safeFinal = Math.Max(0, finalScore);
+        int safeBest = Math.Max(Math.Max(0, bestScore), safeFinal);
+        int pointsToBest = safeFinal >= safeBest ? 1 : (safeBest - safeFinal + 1);
+
+        if (!rankInfo.IsMaxRank && rankInfo.PointsToNext > 0)
+        {
+            string nextName = string.IsNullOrEmpty(rankInfo.NextRankName) ? "—" : rankInfo.NextRankName;
+
+            if (safeFinal < safeBest)
+            {
+                return $"NEXT RUN   //   +{rankInfo.PointsToNext} TO {nextName}   •   +{pointsToBest} TO NEW BEST";
+            }
+
+            return $"NEXT RUN   //   +{rankInfo.PointsToNext} TO {nextName}";
+        }
+
+        if (safeFinal < safeBest)
+        {
+            return $"NEXT RUN   //   +{pointsToBest} TO NEW BEST";
+        }
+
+        return $"NEXT RUN   //   BEAT BEST {safeBest + 1}";
+    }
+
+    /// <summary>
+    /// Formats brief challenge-transition HUD copy from the existing challenge state signal.
+    /// </summary>
+    public static string BuildChallengeStatus(ChallengeState state)
+    {
+        switch (state)
+        {
+            case ChallengeState.Pressure:
+                return "CHALLENGE  //  PRESSURE";
+            case ChallengeState.Recovery:
+                return "CHALLENGE  //  RECOVERY";
+            default:
+                return string.Empty;
+        }
+    }
 }
