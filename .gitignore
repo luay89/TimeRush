@@ -1,0 +1,6 @@
+node_modules/
+dist/
+release/
+.wine*/
+.DS_Store
+*.log
