@@ -25,9 +25,9 @@ app.whenReady().then(() => {
     fs.writeFileSync(result.filePath, Buffer.from(base64, 'base64'));
     return { canceled: false, filePath: result.filePath };
   });
-  ipcMain.handle('print-window', async (event) => {
+  ipcMain.handle('print-window', async (event, copies = 1) => {
     const win = BrowserWindow.fromWebContents(event.sender);
-    return new Promise((resolve) => win.webContents.print({ silent: false, printBackground: true }, (success, reason) => resolve({ success, reason })));
+    return new Promise((resolve) => win.webContents.print({ silent: false, printBackground: true, copies: Math.max(1, Math.min(999, Number(copies) || 1)) }, (success, reason) => resolve({ success, reason })));
   });
   createWindow();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
