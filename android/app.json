@@ -1,0 +1,17 @@
+{
+  "expo": {
+    "name": "Barcode Studio",
+    "slug": "barcode-studio",
+    "version": "0.3.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "scheme": "barcodestudio",
+    "android": {
+      "package": "com.barcodestudio.app",
+      "versionCode": 3,
+      "permissions": ["CAMERA"]
+    },
+    "plugins": [["expo-camera", {"cameraPermission": "السماح لـ Barcode Studio باستخدام الكاميرا لمسح الباركود"}]],
+    "extra": {"versionName":"0.3.0"}
+  }
+}
