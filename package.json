@@ -1,6 +1,6 @@
 {
   "name": "barcode-studio",
-  "version": "1.0.0",
+  "version": "0.2.0",
   "description": "Simple multilingual barcode and QR code creator for Windows",
   "main": "electron/main.cjs",
   "author": "Barcode Studio",
