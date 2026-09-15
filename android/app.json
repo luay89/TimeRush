@@ -10,10 +10,9 @@
     "android": {
       "package": "com.barcodestudio.app",
       "versionCode": 4,
-      "permissions": ["CAMERA", "BLUETOOTH", "BLUETOOTH_ADMIN", "BLUETOOTH_CONNECT", "BLUETOOTH_SCAN"]
+      "permissions": ["BLUETOOTH", "BLUETOOTH_ADMIN", "BLUETOOTH_CONNECT", "BLUETOOTH_SCAN"]
     },
     "plugins": [
-      ["expo-camera", {"cameraPermission": "السماح لـ Barcode Studio باستخدام الكاميرا لمسح الباركود"}],
       ["with-rn-bluetooth-classic", {"peripheralUsageDescription":"السماح لـ Barcode Studio بالاتصال بالطابعة الحرارية عبر Bluetooth","alwaysUsageDescription":"السماح لـ Barcode Studio باستخدام Bluetooth للطباعة"}]
     ],
     "extra": {"versionName":"0.4.0","printer":"Xprinter XP-365B","protocol":"Bluetooth Classic SPP / ESC-POS"}
