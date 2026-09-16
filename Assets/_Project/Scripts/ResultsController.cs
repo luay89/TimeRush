@@ -90,6 +90,7 @@ public class ResultsController : MonoBehaviour
 
     private void OnDisable()
     {
+        CancelPendingContinueAttempt();
         UnbindButtons();
     }
 
@@ -1293,7 +1294,20 @@ public class ResultsController : MonoBehaviour
 
     private bool IsActiveAttempt(int attemptId)
     {
-        return continueRequestInProgress && continueAttemptId == attemptId;
+        return isActiveAndEnabled && continueRequestInProgress && continueAttemptId == attemptId;
+    }
+
+    private void CancelPendingContinueAttempt()
+    {
+        if (!continueRequestInProgress)
+        {
+            return;
+        }
+
+        // Invalidate in-flight callbacks tied to this Results lifecycle instance.
+        continueRequestInProgress = false;
+        continueAttemptId++;
+        continueAdState = ContinueAdState.Idle;
     }
 
     private void HandleAdFailure(ContinueAdState failureState, string statusMessage)
