@@ -102,7 +102,7 @@ public sealed class PlayerInputSource : MonoBehaviour
         // release still registers exactly as it did previously.
         if (!swipeDispatchedForTouch)
         {
-            float threshold = Mathf.Max(32f, Screen.width * 0.08f);
+            float threshold = ComputeSwipeThreshold(Screen.width, Screen.height);
             PlayerIntent intent = PlayerIntent.FromSwipe(touch.position - pointerDownPosition, threshold);
 
             if (!intent.IsEmpty)
@@ -153,6 +153,16 @@ public sealed class PlayerInputSource : MonoBehaviour
         {
             laneIntentBuffer.Clear();
         }
+    }
+
+    /// <summary>
+    /// Uses the shorter display side so swipe distance stays consistent across
+    /// landscape and portrait devices instead of becoming too large on wide screens.
+    /// </summary>
+    public static float ComputeSwipeThreshold(float screenWidth, float screenHeight)
+    {
+        float shortSide = Mathf.Max(1f, Mathf.Min(screenWidth, screenHeight));
+        return Mathf.Max(32f, shortSide * 0.08f);
     }
 
     public static bool RequiresBufferClear(GameStateKind state)

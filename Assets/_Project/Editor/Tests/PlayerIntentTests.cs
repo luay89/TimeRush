@@ -82,4 +82,21 @@ public sealed class PlayerIntentTests
         Assert.That(PlayerIntent.ClampLaneIndex(1, -1, 3), Is.EqualTo(0));
         Assert.That(PlayerIntent.ClampLaneIndex(1, 1, 3), Is.EqualTo(2));
     }
+
+    [Test]
+    public void SwipeThreshold_UsesShortScreenSide()
+    {
+        float landscape = PlayerInputSource.ComputeSwipeThreshold(1920f, 1080f);
+        float portrait = PlayerInputSource.ComputeSwipeThreshold(1080f, 1920f);
+
+        Assert.That(landscape, Is.EqualTo(86.4f).Within(0.001f));
+        Assert.That(portrait, Is.EqualTo(86.4f).Within(0.001f));
+    }
+
+    [Test]
+    public void SwipeThreshold_HasMinimumPixelFloor()
+    {
+        float threshold = PlayerInputSource.ComputeSwipeThreshold(320f, 240f);
+        Assert.That(threshold, Is.EqualTo(32f));
+    }
 }
