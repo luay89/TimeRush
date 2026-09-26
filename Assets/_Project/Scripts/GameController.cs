@@ -43,6 +43,17 @@ public class GameController : MonoBehaviour
     public bool IsGameOver => _gameOver;
     public bool HasContinuedThisRun => hasContinuedThisRun;
     public bool IsPlayerInvulnerable => invulnerabilityTimer > 0f;
+
+    /// <summary>
+    /// Extends player invulnerability by at least the given duration (never shortens an
+    /// already-longer window). Used by gameplay pickups such as the shield power-up; shares
+    /// the exact same timer KillOnHit already checks via IsPlayerInvulnerable, so no other
+    /// system needs to change.
+    /// </summary>
+    public void GrantInvulnerability(float seconds)
+    {
+        invulnerabilityTimer = Mathf.Max(invulnerabilityTimer, Mathf.Max(0f, seconds));
+    }
     public bool IsInTrainingWindow => gameBalanceConfig != null && GetEffectiveAliveTime() < gameBalanceConfig.trainingDuration;
     public int NearMissChain { get; private set; }
     public int LastNearMissAward { get; private set; }
@@ -57,6 +68,12 @@ public class GameController : MonoBehaviour
     // Prevents redundant transitions into the Results scene if multiple hazards report the same death.
     private bool resultsSceneLoadRequested;
     private bool hasContinuedThisRun;
+
+    // Counts every death this app session (including a pre-continue death), used only to decide
+    // when the coin-based continue option starts appearing on the Results screen. Never affects
+    // gameplay, difficulty, or fairness.
+    private static int sessionLossCount;
+    public static int SessionLossCount => sessionLossCount;
     private bool runInitialized;
 
     private float scoreTimer;
@@ -157,7 +174,8 @@ public class GameController : MonoBehaviour
         BestScore = Mathf.Max(payload.best, PlayerPrefs.GetInt(BestScoreKey, 0));
         scoreTimer = 0f;
         uiTimer = 0f;
-        aliveTime = 0f;
+        // Resume at the difficulty the player had reached; the ease window below softens it briefly.
+        aliveTime = Mathf.Max(0f, payload.aliveTime);
         invulnerabilityTimer = Mathf.Max(0f, continueInvulnerabilitySeconds);
         difficultyEaseTimer = Mathf.Max(0f, continueDifficultyEaseSeconds);
         ResetFlow();
@@ -267,6 +285,7 @@ public class GameController : MonoBehaviour
                 // The continued run is the same logical run: undo its recorded end so the
                 // eventual final death recounts it once with the full score.
                 ProgressionProfile.RollbackLastRun();
+                PlayerWallet.RollbackPendingEarn();
                 return true;
             }
 
@@ -276,6 +295,7 @@ public class GameController : MonoBehaviour
         }
 
         ProgressionProfile.RollbackLastRun();
+        PlayerWallet.RollbackPendingEarn();
         SceneManager.LoadScene(SceneNames.Game);
         return true;
     }
@@ -300,6 +320,7 @@ public class GameController : MonoBehaviour
         }
 
         _gameOver = true;
+        sessionLossCount++;
         resultsSceneLoadRequested = true;
         GameFeedbackSignals.RaiseGameOver();
 
@@ -315,9 +336,12 @@ public class GameController : MonoBehaviour
         // Record the completed run into cross-run progression totals. A continued run is
         // rolled back in ContinueRun so it is counted once with its final score.
         ProgressionProfile.RecordRun(CurrentScore);
+        // Award coins the same way: granted immediately, rolled back if the player continues,
+        // so the eventual final death re-earns the full amount exactly once.
+        PlayerWallet.EarnPending(PlayerWallet.CoinsForScore(CurrentScore));
         // Persist final state so the Results scene can decide whether continue is still allowed.
         RunLossReason lossReason = source is KillOnHit ? RunLossReason.ObstacleCollision : RunLossReason.None;
-        ScoreSnapshot.Set(CurrentScore, BestScore, hasContinuedThisRun, true, lossReason, setNewBest);
+        ScoreSnapshot.Set(CurrentScore, BestScore, hasContinuedThisRun, true, lossReason, setNewBest, aliveTime);
 
         Debug.Log($"GameOver triggered by {DescribeSource(source)}");
 

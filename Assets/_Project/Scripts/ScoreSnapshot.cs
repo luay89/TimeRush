@@ -1,3 +1,5 @@
+using UnityEngine;
+
 public enum RunLossReason
 {
     None = 0,
@@ -10,16 +12,19 @@ public static class ScoreSnapshot
     {
         public readonly int score;
         public readonly int best;
+        public readonly float aliveTime;
 
-        public ContinuePayload(int score, int best)
+        public ContinuePayload(int score, int best, float aliveTime = 0f)
         {
             this.score = score;
             this.best = best;
+            this.aliveTime = aliveTime;
         }
     }
 
     public static int LastScore { get; private set; }
     public static int LastBest { get; private set; }
+    public static float LastAliveTime { get; private set; }
     public static bool LastRunHasContinued { get; private set; }
     public static bool LastRunCameFromGame { get; private set; }
     public static RunLossReason LastLossReason { get; private set; }
@@ -35,10 +40,12 @@ public static class ScoreSnapshot
         bool hasContinuedThisRun,
         bool cameFromGameScene,
         RunLossReason lossReason = RunLossReason.None,
-        bool setNewBest = false)
+        bool setNewBest = false,
+        float aliveTime = 0f)
     {
         LastScore = score;
         LastBest = best;
+        LastAliveTime = Mathf.Max(0f, aliveTime);
         LastRunHasContinued = hasContinuedThisRun;
         LastRunCameFromGame = cameFromGameScene;
         LastLossReason = lossReason;
@@ -72,7 +79,7 @@ public static class ScoreSnapshot
         }
 
         ContinueRequested = false;
-        payload = new ContinuePayload(LastScore, LastBest);
+        payload = new ContinuePayload(LastScore, LastBest, LastAliveTime);
         return true;
     }
 
@@ -81,6 +88,7 @@ public static class ScoreSnapshot
         HasValue = false;
         LastScore = 0;
         LastBest = 0;
+        LastAliveTime = 0f;
         LastRunHasContinued = false;
         LastRunCameFromGame = false;
         LastLossReason = RunLossReason.None;

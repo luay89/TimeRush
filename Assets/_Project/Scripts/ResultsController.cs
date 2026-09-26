@@ -23,6 +23,13 @@ public class ResultsController : MonoBehaviour
     private const string RestartButtonName = "RestartButton";
     private const string MenuButtonName = "MenuButton";
     private const string ContinueButtonName = "ContinueButton";
+    private const string CoinsContinueButtonName = "CoinsContinueButton";
+    private const int CoinsContinueCost = 100;
+    // Coin-based continue only starts appearing from the player's second loss this app
+    // session onward, so the very first loss stays a clean, ad-only (or no) continue offer.
+    private const int CoinsContinueMinSessionLoss = 2;
+    private const string WalletSkinLabelName = "WalletSkinText";
+    private const string ChangeSkinButtonName = "ChangeSkinButton";
     private const string FinalScoreLabelName = "FinalScoreText";
     private const string BestScoreLabelName = "BestScoreText";
     private const string ProgressionSummaryLabelName = "ProgressionSummaryText";
@@ -37,10 +44,13 @@ public class ResultsController : MonoBehaviour
 
     [Header("UI References (Optional)")]
     [SerializeField] private Button continueButton;
+    [SerializeField] private Button coinsContinueButton;
     [SerializeField] private Button restartButton;
     [SerializeField] private Button menuButton;
     [SerializeField] private TextMeshProUGUI finalScoreText;
     [SerializeField] private TextMeshProUGUI bestScoreText;
+    [SerializeField] private TextMeshProUGUI walletSkinText;
+    [SerializeField] private Button changeSkinButton;
     [SerializeField] private TextMeshProUGUI resultStatusText;
     [SerializeField] private TextMeshProUGUI gameOverTitle;
     [SerializeField] private TextMeshProUGUI progressionSummaryText;
@@ -57,6 +67,7 @@ public class ResultsController : MonoBehaviour
     private bool uiInitialized;
     private bool buttonsBound;
     private bool continueButtonBound;
+    private TextMeshProUGUI coinsContinueLabel;
 
     private Canvas cachedCanvas;
     private bool continueRequestInProgress;
@@ -265,11 +276,15 @@ public class ResultsController : MonoBehaviour
         var scorePanel = CreateScorePanel(contentRoot);
         finalScoreText = CreateLabel(scorePanel, FinalScoreLabelName, Vector2.zero, 60f, "Score: 0", true);
         bestScoreText = CreateLabel(scorePanel, BestScoreLabelName, Vector2.zero, 50f, "Best: 0", true);
+        walletSkinText = CreateLabel(scorePanel, WalletSkinLabelName, Vector2.zero, 32f, "", true);
 
         var buttonsRoot = CreateButtonPanel(contentRoot);
         continueButton = CreateButton(buttonsRoot, ContinueButtonName, "Continue");
+        coinsContinueButton = CreateButton(buttonsRoot, CoinsContinueButtonName, $"Continue ({CoinsContinueCost} Coins)");
+        coinsContinueLabel = coinsContinueButton ? coinsContinueButton.transform.Find("Label")?.GetComponent<TextMeshProUGUI>() : null;
         restartButton = CreateButton(buttonsRoot, RestartButtonName, "Restart");
         menuButton = CreateButton(buttonsRoot, MenuButtonName, "Menu");
+        changeSkinButton = CreateButton(buttonsRoot, ChangeSkinButtonName, "Ship Color");
 
         return canvas;
     }
@@ -336,6 +351,7 @@ public class ResultsController : MonoBehaviour
         var restartBound = BindButton(restartButton, RestartGame, nameof(RestartGame));
         var menuBound = BindButton(menuButton, GoToMenu, nameof(GoToMenu));
         BindContinueButton();
+        BindCoinsContinueButton();
 
         buttonsBound = restartBound && menuBound;
     }
@@ -351,6 +367,17 @@ public class ResultsController : MonoBehaviour
         continueButton.onClick.RemoveAllListeners();
         continueButton.onClick.AddListener(OnContinuePressed);
         continueButtonBound = true;
+    }
+
+    private void BindCoinsContinueButton()
+    {
+        if (!coinsContinueButton)
+        {
+            return;
+        }
+
+        coinsContinueButton.onClick.RemoveAllListeners();
+        coinsContinueButton.onClick.AddListener(OnCoinsContinuePressed);
     }
 
     private bool BindButton(Button button, UnityAction action, string methodName, bool required = true)
@@ -380,6 +407,9 @@ public class ResultsController : MonoBehaviour
         if (continueButton && continueButtonBound)
             continueButton.onClick.RemoveAllListeners();
 
+        if (coinsContinueButton)
+            coinsContinueButton.onClick.RemoveAllListeners();
+
         buttonsBound = false;
         continueButtonBound = false;
     }
@@ -392,8 +422,15 @@ public class ResultsController : MonoBehaviour
         if (!canvasTransform) return;
 
         if (!continueButton) continueButton = FindButton(canvasTransform, ContinueButtonName);
+        if (!coinsContinueButton)
+        {
+            coinsContinueButton = FindButton(canvasTransform, CoinsContinueButtonName);
+            coinsContinueLabel = coinsContinueButton ? coinsContinueButton.transform.Find("Label")?.GetComponent<TextMeshProUGUI>() : null;
+        }
         if (!restartButton) restartButton = FindButton(canvasTransform, RestartButtonName);
         if (!menuButton) menuButton = FindButton(canvasTransform, MenuButtonName);
+        if (!changeSkinButton) changeSkinButton = FindButton(canvasTransform, ChangeSkinButtonName);
+        if (!walletSkinText) walletSkinText = FindLabel(canvasTransform, WalletSkinLabelName);
 
         AttemptScoreLabelLookup(canvasTransform);
         ConfigureButtonLayout();
@@ -1071,6 +1108,8 @@ public class ResultsController : MonoBehaviour
             missingBestScoreLabelLogged = true;
         }
 
+        UpdateWalletSkinLabel();
+
         if (resultStatusText)
         {
             resultStatusText.text = display.StatusText;
@@ -1200,6 +1239,8 @@ public class ResultsController : MonoBehaviour
             continueButton.interactable = continueAvailable && !adActive;
         }
 
+        RefreshCoinsContinueButton(adActive);
+
         if (restartButton)
         {
             restartButton.interactable = !adActive && !navigationRequestInProgress;
@@ -1209,6 +1250,101 @@ public class ResultsController : MonoBehaviour
         {
             menuButton.interactable = !adActive && !navigationRequestInProgress;
         }
+    }
+
+    private bool IsCoinsContinueEligible()
+    {
+        // Only offered from the player's second loss this session onward, so the first loss
+        // stays a clean, uncluttered offer (ad continue only, if available at all).
+        return continueAvailable && GameController.SessionLossCount >= CoinsContinueMinSessionLoss;
+    }
+
+    private void RefreshCoinsContinueButton(bool adActive)
+    {
+        if (!coinsContinueButton)
+        {
+            return;
+        }
+
+        bool eligible = IsCoinsContinueEligible();
+        coinsContinueButton.gameObject.SetActive(eligible);
+
+        if (!eligible)
+        {
+            return;
+        }
+
+        bool canAfford = PlayerWallet.Balance >= CoinsContinueCost;
+        coinsContinueButton.interactable = canAfford && !adActive && !continueRequestInProgress;
+
+        if (coinsContinueLabel)
+        {
+            coinsContinueLabel.text = canAfford
+                ? $"Continue ({CoinsContinueCost} Coins)"
+                : $"Need {CoinsContinueCost} Coins (have {PlayerWallet.Balance})";
+        }
+    }
+
+    private void OnCoinsContinuePressed()
+    {
+        if (continueRequestInProgress || navigationRequestInProgress)
+        {
+            return;
+        }
+
+        if (!IsCoinsContinueEligible() || !ScoreSnapshot.CanContinue)
+        {
+            RefreshContinueState();
+            return;
+        }
+
+        if (!PlayerWallet.TrySpend(CoinsContinueCost))
+        {
+            SetStatusMessage("NOT ENOUGH COINS");
+            RefreshCoinsContinueButton(continueRequestInProgress);
+            return;
+        }
+
+        bool ok = false;
+        try
+        {
+            ok = GameController.ContinueRun();
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError($"[CONTINUE] Exception in ContinueRun() (coins path): {ex}", this);
+            ok = false;
+        }
+
+        if (ok)
+        {
+            continueAvailable = false;
+            ApplyButtonStates();
+            return;
+        }
+
+        // Continue failed after payment (e.g. scene transition rejected it) -- refund the coins.
+        PlayerWallet.Earn(CoinsContinueCost);
+        SetStatusMessage("CONTINUE FAILED");
+        RefreshContinueState();
+    }
+
+    private void UpdateWalletSkinLabel()
+    {
+        if (!walletSkinText)
+        {
+            return;
+        }
+
+        int skinIndex = ShipSkinCatalog.IndexOf(ShipSkinManager.SelectedSkinId);
+        string skinName = ShipSkinCatalog.Skins[skinIndex].DisplayName;
+        walletSkinText.text = $"Coins: {PlayerWallet.Balance}   |   Ship: {skinName}";
+    }
+
+    private void OnChangeSkinPressed()
+    {
+        ShipSkinManager.CycleToNext();
+        UpdateWalletSkinLabel();
     }
 
     private IRewardedAdService ResolveRewardedAdService()

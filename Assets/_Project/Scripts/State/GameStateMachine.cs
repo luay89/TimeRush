@@ -83,6 +83,27 @@ public sealed class GameStateMachine : MonoBehaviour
         }
     }
 
+    // Mobile: auto-pause when the app is backgrounded (home button, phone call, notification shade)
+    // so the run doesn't keep going and kill the player while they're away.
+    private void OnApplicationPause(bool pauseStatus)
+    {
+        if (pauseStatus && ownsSingleton && CurrentState == GameStateKind.Playing)
+        {
+            Pause();
+        }
+    }
+
+#if !UNITY_EDITOR
+    // Editor excluded: clicking another editor window would otherwise pause every play session.
+    private void OnApplicationFocus(bool hasFocus)
+    {
+        if (!hasFocus && ownsSingleton && CurrentState == GameStateKind.Playing)
+        {
+            Pause();
+        }
+    }
+#endif
+
     public bool StartBootFlow()
     {
         return TryBeginSceneLoad(GameStateKind.MenuHub, SceneNames.MenuHub);

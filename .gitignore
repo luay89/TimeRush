@@ -38,3 +38,8 @@ sysinfo.txt
 # Other
 .DS_Store
 Thumbs.db
+
+# Stray nested Unity project (has its own broken/unborn .git, not a submodule --
+# blocks "git add -A" on the outer repo with "does not have a commit checked out").
+# Excluded here rather than deleted so nothing on disk is touched.
+My project/

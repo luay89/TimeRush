@@ -38,13 +38,17 @@ MonoBehaviour:
   runVolume: 0.42
   pauseVolume: 0.32
   movementAudioCooldown: 0.06
-  runStartClip: {fileID: 0}
-  laneChangeClip: {fileID: 0}
-  depthMoveClip: {fileID: 0}
-  nearMissClip: {fileID: 0}
-  collisionClip: {fileID: 0}
-  gameOverClip: {fileID: 0}
-  pauseClip: {fileID: 0}
-  resumeClip: {fileID: 0}
-  paceMilestoneClip: {fileID: 0}
+  runStartClip: {fileID: 8300000, guid: 07b80fadaf6d43b2b3349dec6f3f441d, type: 3}
+  laneChangeClip: {fileID: 8300000, guid: 593ef4a3b8a0428499a7ddf9294dccc9, type: 3}
+  depthMoveClip: {fileID: 8300000, guid: 794c74c92bc5402e84eb4c42e17c9b07, type: 3}
+  nearMissClip: {fileID: 8300000, guid: 8531c346c0c94c268462e39fc8deba93, type: 3}
+  collisionClip: {fileID: 8300000, guid: e771a1f90a354c5ea2dc4ecd808b7eec, type: 3}
+  gameOverClip: {fileID: 8300000, guid: b39f448d58be4434bfe1fe73520493b9, type: 3}
+  pauseClip: {fileID: 8300000, guid: 9cdda451c57e4475a61e483a448e06bd, type: 3}
+  resumeClip: {fileID: 8300000, guid: 292e2945aa91463ca500764835a28dbf, type: 3}
+  paceMilestoneClip: {fileID: 8300000, guid: 0bc2edd9864b447eae8311ba27f19cae, type: 3}
   paceMilestoneStep: 0.25
+  flowFeedbackReferenceMultiplier: 4
+  flowFeedbackMaxBoost: 1.5
+  pressureBeginClip: {fileID: 8300000, guid: d1828590a67445c3864e11e079e4b6de, type: 3}
+  recoveryBeginClip: {fileID: 8300000, guid: f88cd482ca3e44f38ce7db17737c51ed, type: 3}

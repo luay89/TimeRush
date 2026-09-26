@@ -37,10 +37,28 @@ public class PlayerController : MonoBehaviour
     public int CurrentLane => currentLane;
     public float CurrentTrackDepth => transform.position.z;
     public float TargetTrackDepth => targetDepthZ;
-    public float MinimumSafeDepth => trackCenterZ - safeDepthRange;
-    public float MaximumSafeDepth => trackCenterZ + safeDepthRange;
+    public float MinimumSafeDepth => trackCenterZ - EffectiveSafeDepthRange;
+    public float MaximumSafeDepth => trackCenterZ + EffectiveSafeDepthRange;
     public float LaneChangeProgress { get; private set; }
     public bool IsLaneTransitioning => Mathf.Abs(lanePositions[currentLane] - transform.position.x) > 0.03f;
+
+    // Same GetDepthVariation() curve ObstacleSpawner already applies to its depth-spawn offsets
+    // (0.65 at run start -> 1 by the time difficulty progress completes). Without this, the
+    // player's reachable depth range stayed fixed at the full late-game width while obstacle
+    // spawn depths started compressed near center -- letting an early-run player camp at a depth
+    // extreme that was mathematically unreachable by any obstacle's spawn slot (both use 1x1x1
+    // colliders, so anywhere more than 1 unit from every active spawn slot is untouchable).
+    // Scaling by the same signal keeps that margin constant all run; late-game (variation==1)
+    // behavior is byte-identical to before this fix.
+    private float EffectiveSafeDepthRange
+    {
+        get
+        {
+            var gc = GameController.Instance;
+            float variation = gc ? gc.GetDepthVariation() : 1f;
+            return DepthRangeMath.ComputeEffectiveSafeDepthRange(safeDepthRange, variation);
+        }
+    }
 
     public FairnessPlayerState GetFairnessState()
     {
