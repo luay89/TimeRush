@@ -36,6 +36,7 @@ public class ResultsController : MonoBehaviour
     private const string RankProgressLabelName = "RankProgressText";
     private const string MilestoneLabelName = "MilestoneText";
     private const string NextRunHintLabelName = "NextRunHintText";
+    private const string DailyMissionsLabelName = "DailyMissionsText";
     private const string ResultStatusLabelName = "ResultStatusText";
     private const string GameOverTitleName = "GameOverTitle";
 
@@ -56,6 +57,7 @@ public class ResultsController : MonoBehaviour
     [SerializeField] private TextMeshProUGUI progressionSummaryText;
     [SerializeField] private TextMeshProUGUI rankProgressText;
     [SerializeField] private TextMeshProUGUI milestoneText;
+    [SerializeField] private TextMeshProUGUI dailyMissionsText;
     [SerializeField] private TextMeshProUGUI nextRunHintText;
     [SerializeField, Tooltip("Optional rewarded-ad provider. If omitted, ResultsController searches active/persistent objects for an IRewardedAdService implementation.")]
     private MonoBehaviour rewardedAdServiceSource;
@@ -686,8 +688,13 @@ public class ResultsController : MonoBehaviour
     private void ConfigureButtonLayout()
     {
         ApplyButtonStyle(continueButton);
+        // These two were previously left out of the style pass entirely -- they kept Unity's
+        // default plain-white Image color forever, which is exactly why "Continue (100 Coins)"
+        // and "Ship Color" looked like unfinished placeholder buttons next to the other three.
+        ApplyButtonStyle(coinsContinueButton);
         ApplyButtonStyle(restartButton);
         ApplyButtonStyle(menuButton);
+        ApplyButtonStyle(changeSkinButton);
     }
 
     private static void ApplyButtonStyle(Button button)
@@ -702,10 +709,14 @@ public class ResultsController : MonoBehaviour
         }
 
         Color accent = button.name == ContinueButtonName
-            ? new Color(0.12f, 0.95f, 1f, 1f)
-            : button.name == MenuButtonName
-                ? new Color(0.56f, 0.34f, 1f, 1f)
-                : new Color(1f, 0.36f, 0.12f, 1f);
+            ? new Color(0.12f, 0.95f, 1f, 1f) // Cyan -- primary action
+            : button.name == CoinsContinueButtonName
+                ? new Color(1f, 0.78f, 0.32f, 1f) // Amber -- same accent the coin/milestone HUD copy already uses
+                : button.name == MenuButtonName
+                    ? new Color(0.56f, 0.34f, 1f, 1f) // Violet
+                    : button.name == ChangeSkinButtonName
+                        ? new Color(0.62f, 0.7f, 0.86f, 1f) // Muted -- secondary action, matches MenuHubUI/PauseOverlayPresenter's Muted tone
+                        : new Color(1f, 0.36f, 0.12f, 1f); // Orange -- Restart and any other fallback
 
         var label = button.GetComponentInChildren<TextMeshProUGUI>();
         if (label)
@@ -765,6 +776,11 @@ public class ResultsController : MonoBehaviour
             nextRunHintText = FindLabel(canvasTransform, NextRunHintLabelName);
         }
 
+        if (!dailyMissionsText)
+        {
+            dailyMissionsText = FindLabel(canvasTransform, DailyMissionsLabelName);
+        }
+
         if (!gameOverTitle)
         {
             var foundTitle = FindLabel(canvasTransform, GameOverTitleName);
@@ -805,6 +821,7 @@ public class ResultsController : MonoBehaviour
         EnsureRankProgressLabel(canvasTransform);
         EnsureMilestoneLabel(canvasTransform);
         EnsureNextRunHintLabel(canvasTransform);
+        EnsureDailyMissionsLabel(canvasTransform);
     }
 
     private void EnsureProgressionSummaryLabel(Transform canvasTransform)
@@ -876,6 +893,39 @@ public class ResultsController : MonoBehaviour
         }
 
         ConfigureNextRunHintLabel(nextRunHintText);
+    }
+
+    // Compact daily-missions readout -- three short lines, refreshed every time Results shows so
+    // a run that just completed a mission reflects it immediately. Purely presentational; all
+    // progress/reward state lives in DailyMissions, never here.
+    private void EnsureDailyMissionsLabel(Transform canvasTransform)
+    {
+        if (!dailyMissionsText)
+        {
+            Transform reference = nextRunHintText ? nextRunHintText.transform : (milestoneText ? milestoneText.transform : null);
+            Transform parent = reference ? reference.parent : canvasTransform;
+            dailyMissionsText = CreateLabel(parent, DailyMissionsLabelName, new Vector2(0f, -705f), 24f, string.Empty, true);
+
+            if (reference && dailyMissionsText.transform.parent == reference.parent)
+            {
+                dailyMissionsText.transform.SetSiblingIndex(reference.GetSiblingIndex() + 1);
+            }
+        }
+
+        ConfigureDailyMissionsLabel(dailyMissionsText);
+    }
+
+    private static void ConfigureDailyMissionsLabel(TextMeshProUGUI label)
+    {
+        if (!label)
+        {
+            return;
+        }
+
+        label.color = new Color(0.7f, 0.95f, 0.8f, 1f);
+        label.characterSpacing = 0.5f;
+        label.enableWordWrapping = false;
+        label.raycastTarget = false;
     }
 
     private static void ConfigureProgressionSummaryLabel(TextMeshProUGUI label)
@@ -1082,7 +1132,8 @@ public class ResultsController : MonoBehaviour
             finalScore,
             bestScore,
             ScoreSnapshot.HasValue && ScoreSnapshot.LastRunSetNewBest,
-            ScoreSnapshot.LastLossReason);
+            ScoreSnapshot.LastLossReason,
+            DailyBestScore.Score);
 
         // Safety net: if Results was reached without GameController submitting (e.g. a direct
         // scene load), persist the resolved best through the same competition store so the
@@ -1166,6 +1217,11 @@ public class ResultsController : MonoBehaviour
             {
                 milestoneText.text = string.Empty;
             }
+        }
+
+        if (dailyMissionsText)
+        {
+            dailyMissionsText.text = ResultsPresentation.BuildDailyMissionsSummary(DailyMissions.GetStatuses());
         }
 
         if (nextRunHintText)

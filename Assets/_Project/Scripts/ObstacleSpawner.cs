@@ -56,6 +56,11 @@ public class ObstacleSpawner : MonoBehaviour
     private int[] laneSelectionAge;
     private int lastLaneIndex = -1;
     private int lastDepthIndex = -1;
+    // Lightweight, read-only telemetry: how many obstacles have actually spawned at each depth
+    // offset this run. Never read by spawn/selection logic itself -- purely so a real playtest can
+    // see the true depth distribution on-screen (via ScoreUIBinder) instead of trusting an educated
+    // guess about whether one depth is statistically favored. Reset every run in Awake().
+    public static int[] DepthSpawnCounts = System.Array.Empty<int>();
     private int previousLaneIndex = -1;
     private int secondPreviousLaneIndex = -1;
     private float previousSpawnTime = float.NegativeInfinity;
@@ -98,6 +103,7 @@ public class ObstacleSpawner : MonoBehaviour
         ApplyConfiguration();
         NormalizeLanePositions();
         NormalizeDepthOffsets();
+        DepthSpawnCounts = new int[depthOffsets.Length];
         minLaneGap = Mathf.Max(2f, minLaneGap);
         minDepthSeparation = Mathf.Max(0.5f, minDepthSeparation);
         lockWindowSeconds = Mathf.Max(0.2f, lockWindowSeconds);
@@ -638,6 +644,11 @@ public class ObstacleSpawner : MonoBehaviour
         lastLaneIndex = laneIndex;
         lastDepthIndex = depthIndex;
 
+        if (DepthSpawnCounts != null && depthIndex >= 0 && depthIndex < DepthSpawnCounts.Length)
+        {
+            DepthSpawnCounts[depthIndex]++;
+        }
+
         if (laneSelectionAge != null)
         {
             for (int i = 0; i < laneSelectionAge.Length; i++)
@@ -1023,6 +1034,29 @@ public class ObstacleSpawner : MonoBehaviour
         {
             lanePositions[i] = RequiredLanePositions[i];
         }
+    }
+
+    // Formats DepthSpawnCounts as "12/9/11" (one number per depth offset, in depthOffsets order --
+    // index 0 is the most-negative/backward offset) for the on-screen depth-readability gauge.
+    public static string GetDepthSpawnSummary()
+    {
+        if (DepthSpawnCounts == null || DepthSpawnCounts.Length == 0)
+        {
+            return string.Empty;
+        }
+
+        var builder = new System.Text.StringBuilder(16);
+        for (int i = 0; i < DepthSpawnCounts.Length; i++)
+        {
+            if (i > 0)
+            {
+                builder.Append('/');
+            }
+
+            builder.Append(DepthSpawnCounts[i]);
+        }
+
+        return builder.ToString();
     }
 
     private void NormalizeDepthOffsets()

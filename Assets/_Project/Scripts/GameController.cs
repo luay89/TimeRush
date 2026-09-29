@@ -201,7 +201,7 @@ public class GameController : MonoBehaviour
 
             if (flowTimer <= 0f)
             {
-                ResetFlow();
+                DecayFlow();
             }
         }
     }
@@ -331,6 +331,11 @@ public class GameController : MonoBehaviour
         CompetitionRecords.Submission submission = CompetitionProfile.SubmitRun(CurrentScore);
         bool setNewBest = submission.IsNewRecord;
         BestScore = submission.Records.HighestScore;
+        // Separate, purely cosmetic daily-best tracker for the "Best Today" stat -- never read by
+        // gameplay/fairness, and independent of the all-time BestScore above.
+        DailyBestScore.Submit(CurrentScore);
+        // Daily missions progress -- also purely cosmetic/reward, never read by gameplay/fairness.
+        DailyMissions.ReportRun(CurrentScore, aliveTime, !hasContinuedThisRun);
 
         PlayerPrefs.Save();
         // Record the completed run into cross-run progression totals. A continued run is
@@ -495,6 +500,33 @@ public class GameController : MonoBehaviour
         NearMissChain = 0;
         LastNearMissAward = 0;
         flowTimer = 0f;
+    }
+
+    /// <summary>
+    /// Flow identity mechanic: a missed beat now costs one tier of the chain instead of the whole
+    /// streak. This makes Flow feel like a skill you build and can partially recover from a single
+    /// slip, rather than an all-or-nothing timer -- the "logic improvement" behind making Near-Miss
+    /// Flow the game's core identity rather than a side bonus. Each decay step grants a shorter
+    /// grace window than the original build-up window, so a chain that keeps lapsing still drains
+    /// to zero in a few steps instead of lingering forever.
+    /// </summary>
+    private void DecayFlow()
+    {
+        if (NearMissChain <= 0)
+        {
+            ResetFlow();
+            return;
+        }
+
+        NearMissChain = Mathf.Max(0, NearMissChain - Mathf.Max(1, nearMissesPerFlowLevel));
+
+        if (NearMissChain <= 0)
+        {
+            ResetFlow();
+            return;
+        }
+
+        flowTimer = Mathf.Max(0.1f, flowRetentionSeconds * 0.5f);
     }
 
     private void ResetScoreState()

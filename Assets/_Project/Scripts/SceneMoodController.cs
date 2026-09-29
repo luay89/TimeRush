@@ -1,10 +1,13 @@
 using UnityEngine;
 
 /// <summary>
-/// Shifts the directional light color/intensity and fog color gradually as the run progresses,
-/// driven only by GameController.CurrentScore, so the scene visibly changes the longer a run
-/// goes instead of looking identical from second 1 to the end. Purely cosmetic -- it never
-/// reads or writes anything related to gameplay, obstacles, or difficulty.
+/// Shifts the ambient starlight color/intensity and void-fog color gradually as the run
+/// progresses, driven only by GameController.CurrentScore, so the scene visibly changes the
+/// longer a run goes instead of looking identical from second 1 to the end -- the ship is really
+/// flying from deep void through an asteroid belt, an ice comet field, and finally a nebula core.
+/// Uses the same score thresholds as RushTrackEnvironment's asteroid-field zone palette so the
+/// lighting and the passing rocks/debris shift together. Purely cosmetic -- it never reads or
+/// writes anything related to gameplay, obstacles, or difficulty.
 /// </summary>
 public sealed class SceneMoodController : MonoBehaviour
 {
@@ -79,7 +82,7 @@ public sealed class SceneMoodController : MonoBehaviour
     {
         return new[]
         {
-            // Cool night blue -- the run's opening feel, unchanged from before.
+            // Deep Void -- cool starlit blue-white, the run's opening feel.
             new MoodStage
             {
                 scoreThreshold = 0,
@@ -87,29 +90,31 @@ public sealed class SceneMoodController : MonoBehaviour
                 fogColor = new Color(0.0235f, 0.0314f, 0.0784f, 1f),
                 lightIntensity = 0.95f,
             },
-            // Violet dusk -- first clear shift, a couple hundred points in.
+            // Asteroid Belt -- warm amber starlight scattering off rust-colored rock, first clear
+            // shift a couple hundred points in. Matches RushTrackEnvironment's Asteroid Belt zone.
             new MoodStage
             {
                 scoreThreshold = 400,
-                lightColor = new Color(0.82f, 0.68f, 1f, 1f),
-                fogColor = new Color(0.06f, 0.03f, 0.12f, 1f),
-                lightIntensity = 1f,
+                lightColor = new Color(1f, 0.66f, 0.42f, 1f),
+                fogColor = new Color(0.09f, 0.045f, 0.02f, 1f),
+                lightIntensity = 1.05f,
             },
-            // Warm ember -- mid-late run, the danger/intensity read.
+            // Ice Comet Field -- pale icy cyan-white, mid-late run. Matches the Ice Comet Field zone.
             new MoodStage
             {
                 scoreThreshold = 900,
-                lightColor = new Color(1f, 0.62f, 0.5f, 1f),
-                fogColor = new Color(0.1f, 0.035f, 0.05f, 1f),
+                lightColor = new Color(0.75f, 0.92f, 1f, 1f),
+                fogColor = new Color(0.03f, 0.06f, 0.11f, 1f),
                 lightIntensity = 1.05f,
             },
-            // Teal dawn -- a rare, hard-earned late-run payoff for a long survival streak.
+            // Nebula Core -- a rare, hard-earned late-run payoff: violet-magenta glow for a long
+            // survival streak. Matches the Nebula Core zone.
             new MoodStage
             {
                 scoreThreshold = 1600,
-                lightColor = new Color(0.5f, 0.95f, 0.85f, 1f),
-                fogColor = new Color(0.02f, 0.08f, 0.07f, 1f),
-                lightIntensity = 1.05f,
+                lightColor = new Color(0.88f, 0.6f, 1f, 1f),
+                fogColor = new Color(0.09f, 0.03f, 0.15f, 1f),
+                lightIntensity = 1.15f,
             },
         };
     }

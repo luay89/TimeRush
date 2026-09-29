@@ -27,7 +27,11 @@ public static class ShipSkinCatalog
 
     public static readonly Skin[] Skins =
     {
-        new Skin("cyan", "AZURE (افتراضي)", new Color(0.05f, 0.55f, 0.95f, 1f), new Color(0.85f, 0.95f, 1f, 1f), 0),
+        // Plain ASCII only: the Results screen's TextMeshPro label uses the default
+        // LiberationSans SDF font asset, which has no Arabic glyphs -- any non-Latin character
+        // here renders as a missing-glyph box and spams a "character not found" warning every
+        // frame the label is visible.
+        new Skin("cyan", "AZURE (DEFAULT)", new Color(0.05f, 0.55f, 0.95f, 1f), new Color(0.85f, 0.95f, 1f, 1f), 0),
         new Skin("amber", "EMBER", new Color(1f, 0.45f, 0.05f, 1f), new Color(1f, 0.85f, 0.4f, 1f), 150),
         new Skin("magenta", "NOVA", new Color(0.85f, 0.1f, 0.65f, 1f), new Color(1f, 0.6f, 0.9f, 1f), 250),
         new Skin("emerald", "VIPER", new Color(0.05f, 0.85f, 0.45f, 1f), new Color(0.6f, 1f, 0.8f, 1f), 350),

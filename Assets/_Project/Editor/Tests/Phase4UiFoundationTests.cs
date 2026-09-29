@@ -39,7 +39,7 @@ public sealed class Phase4UiFoundationTests
         ResultsPresentation.DisplayData display = ResultsPresentation.Build(142, 142, true, RunLossReason.ObstacleCollision);
 
         Assert.That(display.FinalScoreText, Is.EqualTo("Score: 142"));
-        Assert.That(display.BestScoreText, Is.EqualTo("Best: 142"));
+        Assert.That(display.BestScoreText, Is.EqualTo("Best: 142   //   Today: 142"));
         Assert.That(display.StatusText, Is.EqualTo("NEW BEST  //  IMPACT DETECTED"));
     }
 
@@ -49,7 +49,7 @@ public sealed class Phase4UiFoundationTests
         ResultsPresentation.DisplayData display = ResultsPresentation.Build(38, 90, false, RunLossReason.None);
 
         Assert.That(display.FinalScoreText, Is.EqualTo("Score: 38"));
-        Assert.That(display.BestScoreText, Is.EqualTo("Best: 90"));
+        Assert.That(display.BestScoreText, Is.EqualTo("Best: 90   //   Today: 38"));
         Assert.That(display.StatusText, Is.EqualTo("RUN ENDED"));
     }
 }

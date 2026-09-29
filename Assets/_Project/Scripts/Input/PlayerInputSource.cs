@@ -26,6 +26,21 @@ public sealed class PlayerInputSource : MonoBehaviour
         laneIntentBuffer = new PlayerIntentBuffer(laneInputBufferSeconds);
     }
 
+    /// <summary>
+    /// Defensive lazy-init: PlayerIntentBuffer is a plain C# class, not a Unity-serializable type,
+    /// so an in-editor script recompile while Play Mode is already running (a "domain reload"
+    /// triggered by editing a .cs file mid-session) resets this field to null without Awake()
+    /// running again on an object that already existed. This guard makes a stray null here
+    /// self-heal instead of throwing, with zero effect on normal play (Awake always sets it first).
+    /// </summary>
+    private void EnsureLaneIntentBuffer()
+    {
+        if (laneIntentBuffer == null)
+        {
+            laneIntentBuffer = new PlayerIntentBuffer(laneInputBufferSeconds);
+        }
+    }
+
     private void OnEnable()
     {
         if (GameStateMachine.HasInstance)
@@ -48,6 +63,8 @@ public sealed class PlayerInputSource : MonoBehaviour
         {
             return;
         }
+
+        EnsureLaneIntentBuffer();
 
         if (!GameStateMachine.IsGameplayInputAllowed)
         {
@@ -151,6 +168,7 @@ public sealed class PlayerInputSource : MonoBehaviour
     {
         if (RequiresBufferClear(current))
         {
+            EnsureLaneIntentBuffer();
             laneIntentBuffer.Clear();
         }
     }

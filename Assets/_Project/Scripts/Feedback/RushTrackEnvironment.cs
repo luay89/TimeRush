@@ -12,6 +12,9 @@ public sealed class RushTrackEnvironment : MonoBehaviour
     private const string GameSceneName = SceneNames.Game;
     private const string EnvironmentName = "Environment";
     private const float TrackCenterZ = 5f;
+    // How much brighter than its base color the glowing vein/crystal/beacon material's emission
+    // is driven -- purely cosmetic (bloom-only), read by the zone-color drift in Update().
+    private const float VeinEmissionIntensity = 1.6f;
 
     [Header("Accessibility")]
     [SerializeField] private FeedbackConfig feedbackConfig;
@@ -40,13 +43,23 @@ public sealed class RushTrackEnvironment : MonoBehaviour
     [Tooltip("Brightness ceiling for the shared cyan/purple glow materials at max pace -- a slow continuous escalation, never an oscillation.")]
     [SerializeField, Range(1f, 2.5f)] private float maxAmbientGlowBoost = 1.9f;
 
-    [Header("Roadside Zone Transition")]
-    [Tooltip("How quickly the skyline's body/accent/roof colors drift toward the current distance zone (city/market/coastal/dawn). Purely cosmetic, driven only by GameController.CurrentScore.")]
+    [Header("Space Zone Transition")]
+    [Tooltip("How quickly the asteroid field's rock/vein/debris colors drift toward the current distance zone (deep void/asteroid belt/ice field/nebula core). Purely cosmetic, driven only by GameController.CurrentScore.")]
     [SerializeField, Range(0.05f, 2f)] private float zoneTransitionSpeed = 0.35f;
 
     [Header("Depth Markers")]
     [Tooltip("Matches TrackLayoutConfig.SafeDepthRange -- the player's own late-game reachable depth range. Purely a fixed visual reference; never reads player/gameplay state.")]
     [SerializeField] private float depthMarkerReachRange = 2f;
+
+    [Header("Speed Dust")]
+    [Tooltip("Fine glowing dust streaking past the ship -- an extra nearest-band speed cue on top of the cube speed streaks. Purely cosmetic.")]
+    [SerializeField, Range(20f, 120f)] private float dustEmissionRate = 55f;
+    [SerializeField, Range(0.4f, 1.6f)] private float dustLifetime = 0.85f;
+
+    [Header("Ambient Asteroid Flyby")]
+    [Tooltip("Occasional very light camera jolt suggesting a large asteroid just swept past close by -- purely cosmetic flavor on a soft timer, never derived from real collision/near-miss detection or gameplay state.")]
+    [SerializeField, Range(3f, 15f)] private float ambientJoltMinInterval = 5f;
+    [SerializeField, Range(4f, 22f)] private float ambientJoltMaxInterval = 9.5f;
 
     [Header("Track Presentation")]
     [SerializeField] private float trackHalfWidth = 5.4f;
@@ -74,58 +87,76 @@ public sealed class RushTrackEnvironment : MonoBehaviour
     private Material structuralMaterial;
     private Material energyAccentMaterial;
     private Material horizonMaterial;
-    private Material buildingBodyMaterial;
-    private Material buildingAccentMaterial;
-    private Material buildingRoofMaterial;
+    private Material asteroidBodyMaterial;
+    private Material asteroidVeinMaterial;
+    private Material debrisMaterial;
+    private Material skyboxMaterial;
+    private Material laneFlowMaterial;
     private Color laneGlowBaseColor;
     private Color energyAccentBaseColor;
-    private Color buildingBodyColor;
-    private Color buildingAccentColor;
-    private Color buildingRoofColor;
+    private Color asteroidBodyColor;
+    private Color asteroidVeinColor;
+    private Color debrisColor;
+    private Color skyboxTintColor;
     private float ambientGlowBrightness = 1f;
+    private ParticleSystem speedDustSystem;
+    private ParticleSystem starfieldSystem;
+    private ParticleSystem nebulaSystem;
+    private float ambientJoltTimer;
+    // Scrolling offset for the procedural track-grid texture, advanced every frame by the same
+    // markerSpeed every other band already uses -- so the ground itself visibly streams past
+    // instead of looking like a static painted floor.
+    private float trackScrollY;
+    // Same idea for the lane-guidance lines' flowing energy-pulse texture.
+    private float laneFlowScrollY;
     private bool built;
 
-    // Distance/score-driven roadside palette so the passing skyline visibly changes character
-    // over a long run instead of repeating the same city towers forever -- the same threshold
-    // pattern SceneMoodController already uses for the light/fog mood, so the two reinforce
-    // each other. Geometry (shape) variety is separate and handled per-building in
-    // BuildSkylineBuilding; this only drives the shared body/accent/roof material colors.
-    private readonly struct RoadsideZone
+    // Distance/score-driven space palette so the passing asteroid field visibly changes
+    // character over a long run instead of repeating the same rock forever -- the same
+    // threshold pattern SceneMoodController already uses for the light/fog mood, so the two
+    // reinforce each other. Geometry (shape) variety is separate and handled per-cluster in
+    // BuildAsteroidCluster; this only drives the shared rock/vein/debris material colors.
+    private readonly struct SpaceZone
     {
         public readonly int ScoreThreshold;
         public readonly Color BodyColor;
         public readonly Color AccentColor;
         public readonly Color RoofColor;
+        // Skybox tint for this zone -- kept as its own color (rather than reusing BodyColor) so the
+        // backdrop can stay dark/space-like while still drifting hue with the same zone timing as
+        // the rock/vein/debris palette, reinforcing "the ship is somewhere different now."
+        public readonly Color SkyTint;
 
-        public RoadsideZone(int scoreThreshold, Color bodyColor, Color accentColor, Color roofColor)
+        public SpaceZone(int scoreThreshold, Color bodyColor, Color accentColor, Color roofColor, Color skyTint)
         {
             ScoreThreshold = scoreThreshold;
             BodyColor = bodyColor;
             AccentColor = accentColor;
             RoofColor = roofColor;
+            SkyTint = skyTint;
         }
     }
 
-    private static readonly RoadsideZone[] RoadsideZones =
+    private static readonly SpaceZone[] SpaceZones =
     {
-        // City -- the run's opening feel: cool structural blue-gray towers, cyan trim.
-        new RoadsideZone(0, new Color(0.12f, 0.16f, 0.24f), new Color(0.2f, 0.9f, 1f), new Color(0.18f, 0.22f, 0.3f)),
-        // Market -- warm adobe walls, amber trim, red-orange stall awnings.
-        new RoadsideZone(400, new Color(0.5f, 0.3f, 0.2f), new Color(1f, 0.75f, 0.25f), new Color(0.82f, 0.26f, 0.2f)),
-        // Coastal -- sun-bleached sandy huts, teal trim, deep blue thatch roofs.
-        new RoadsideZone(900, new Color(0.72f, 0.62f, 0.44f), new Color(0.2f, 0.85f, 0.78f), new Color(0.12f, 0.34f, 0.44f)),
-        // Dawn bazaar -- a rare, hard-earned late-run payoff: rose-violet stone, gold-pink trim, coral canopies.
-        new RoadsideZone(1600, new Color(0.5f, 0.38f, 0.55f), new Color(1f, 0.55f, 0.78f), new Color(0.92f, 0.42f, 0.5f)),
+        // Deep Void -- the run's opening feel: cool basalt-grey rock, pale starlight veins, near-black indigo sky.
+        new SpaceZone(0, new Color(0.16f, 0.17f, 0.22f), new Color(0.55f, 0.85f, 1f), new Color(0.5f, 0.55f, 0.62f), new Color(0.03f, 0.035f, 0.07f)),
+        // Asteroid Belt -- sun-scorched rust rock, glowing amber mineral veins, burnt-orange debris, warm dark-rust sky glow.
+        new SpaceZone(400, new Color(0.42f, 0.28f, 0.2f), new Color(1f, 0.65f, 0.25f), new Color(0.75f, 0.4f, 0.18f), new Color(0.08f, 0.035f, 0.02f)),
+        // Ice Comet Field -- pale frozen rock, bright cyan crystal veins, frosted metal debris, dark icy-teal sky.
+        new SpaceZone(900, new Color(0.62f, 0.72f, 0.82f), new Color(0.35f, 0.9f, 1f), new Color(0.72f, 0.83f, 0.9f), new Color(0.02f, 0.05f, 0.07f)),
+        // Nebula Core -- a rare, hard-earned late-run payoff: violet glowing rock, hot pink-gold veins, deep violet sky.
+        new SpaceZone(1600, new Color(0.4f, 0.22f, 0.5f), new Color(1f, 0.5f, 0.85f), new Color(0.85f, 0.55f, 0.75f), new Color(0.06f, 0.02f, 0.08f)),
     };
 
-    private static RoadsideZone ResolveRoadsideZone(int score)
+    private static SpaceZone ResolveSpaceZone(int score)
     {
-        RoadsideZone result = RoadsideZones[0];
-        for (int i = 0; i < RoadsideZones.Length; i++)
+        SpaceZone result = SpaceZones[0];
+        for (int i = 0; i < SpaceZones.Length; i++)
         {
-            if (score >= RoadsideZones[i].ScoreThreshold)
+            if (score >= SpaceZones[i].ScoreThreshold)
             {
-                result = RoadsideZones[i];
+                result = SpaceZones[i];
             }
         }
 
@@ -156,6 +187,12 @@ public sealed class RushTrackEnvironment : MonoBehaviour
         public float MinY;
         public float MaxY;
         public bool UsesDepthScale;
+        // Slow constant self-rotation, used only by the asteroid field so tumbling rocks/debris
+        // reinforce "the ship is actually moving through space" rather than just drifting past
+        // flat and static. Left at the struct default (zero) for every other band, so markers and
+        // speed streaks are completely unaffected.
+        public Vector3 RotationAxis;
+        public float RotationSpeed;
     }
 
     // RuntimeInitializeOnLoadMethod fires exactly once per process, but Game.unity's own
@@ -207,6 +244,70 @@ public sealed class RushTrackEnvironment : MonoBehaviour
     private void Awake()
     {
         BuildIfNeeded();
+    }
+
+    // Every material/texture this component owns was created at runtime via "new Material(...)"/
+    // "new Texture2D(...)" -- Unity does NOT automatically free those when the GameObject holding
+    // them is destroyed (unlike imported/shared assets), so without this, every Restart/Continue
+    // (which destroys and rebuilds "Environment" from scratch) would leak a full set of materials
+    // and textures for the rest of the process's lifetime. Mobile devices have far less headroom
+    // for that than a desktop Editor, so this matters far more here than it would look like it does.
+    private void OnDestroy()
+    {
+        DestroyMaterialAndTexture(trackSurfaceMaterial);
+        DestroyMaterialAndTexture(laneFlowMaterial);
+        DestroyIfOwned(laneGlowMaterial);
+        DestroyIfOwned(structuralMaterial);
+        DestroyIfOwned(energyAccentMaterial);
+        DestroyIfOwned(horizonMaterial);
+        DestroyIfOwned(asteroidBodyMaterial);
+        DestroyIfOwned(asteroidVeinMaterial);
+        DestroyIfOwned(debrisMaterial);
+        DestroyIfOwned(skyboxMaterial);
+
+        DestroyParticleRendererMaterial(speedDustSystem);
+        DestroyParticleRendererMaterial(starfieldSystem);
+        DestroyParticleRendererMaterial(nebulaSystem);
+    }
+
+    private static void DestroyIfOwned(Object runtimeObject)
+    {
+        if (runtimeObject)
+        {
+            Destroy(runtimeObject);
+        }
+    }
+
+    private static void DestroyMaterialAndTexture(Material material)
+    {
+        if (!material)
+        {
+            return;
+        }
+
+        if (material.mainTexture)
+        {
+            Destroy(material.mainTexture);
+        }
+
+        Destroy(material);
+    }
+
+    // SoftParticleMaterial.Create() hands back a fresh Material instance per call but always the
+    // same cached, shared texture (also used by ShipThruster) -- so only the material is ours to
+    // free here; the texture must never be destroyed from this component.
+    private static void DestroyParticleRendererMaterial(ParticleSystem system)
+    {
+        if (!system)
+        {
+            return;
+        }
+
+        var particleRenderer = system.GetComponent<ParticleSystemRenderer>();
+        if (particleRenderer && particleRenderer.sharedMaterial)
+        {
+            Destroy(particleRenderer.sharedMaterial);
+        }
     }
 
     private void OnValidate()
@@ -264,20 +365,71 @@ public sealed class RushTrackEnvironment : MonoBehaviour
         ambientGlowBrightness = Mathf.Lerp(ambientGlowBrightness, targetGlowBrightness, 2.5f * Time.deltaTime);
         laneGlowMaterial.color = laneGlowBaseColor * ambientGlowBrightness;
         energyAccentMaterial.color = energyAccentBaseColor * ambientGlowBrightness;
+        if (laneFlowMaterial)
+        {
+            laneFlowMaterial.color = Color.white * Mathf.Clamp(ambientGlowBrightness, 0.6f, 2f);
+        }
 
-        // Slowly drift the skyline's shared body/accent/roof colors toward whatever roadside
-        // zone the current score falls into -- city, market, coastal, dawn bazaar -- so a long
-        // run visibly travels through changing terrain instead of looking identical throughout.
-        RoadsideZone targetZone = ResolveRoadsideZone(gc ? gc.CurrentScore : 0);
+        // Slowly drift the asteroid field's shared rock/vein/debris colors toward whatever space
+        // zone the current score falls into -- deep void, asteroid belt, ice field, nebula core --
+        // so a long run visibly travels through changing space instead of looking identical
+        // throughout, echoing the "the ship is actually going somewhere" ask directly.
+        SpaceZone targetZone = ResolveSpaceZone(gc ? gc.CurrentScore : 0);
         float zoneT = Time.deltaTime * zoneTransitionSpeed;
-        buildingBodyColor = Color.Lerp(buildingBodyColor, targetZone.BodyColor, zoneT);
-        buildingAccentColor = Color.Lerp(buildingAccentColor, targetZone.AccentColor, zoneT);
-        buildingRoofColor = Color.Lerp(buildingRoofColor, targetZone.RoofColor, zoneT);
-        buildingBodyMaterial.color = buildingBodyColor;
-        buildingAccentMaterial.color = buildingAccentColor;
-        buildingRoofMaterial.color = buildingRoofColor;
+        asteroidBodyColor = Color.Lerp(asteroidBodyColor, targetZone.BodyColor, zoneT);
+        asteroidVeinColor = Color.Lerp(asteroidVeinColor, targetZone.AccentColor, zoneT);
+        debrisColor = Color.Lerp(debrisColor, targetZone.RoofColor, zoneT);
+        asteroidBodyMaterial.color = asteroidBodyColor;
+        debrisMaterial.color = debrisColor;
+        // Vein material is emissive (see CreateEmissiveMaterial) so both its dim base tint and its
+        // glow color need updating together, or the crystal would drift in base color but keep
+        // glowing the old zone's hue.
+        asteroidVeinMaterial.color = asteroidVeinColor * 0.6f;
+        asteroidVeinMaterial.SetColor("_EmissionColor", asteroidVeinColor * VeinEmissionIntensity);
+
+        // Same zone-drift timing applied to the skybox backdrop so the atmosphere itself visibly
+        // shifts hue alongside the rocks/lighting instead of staying a fixed, generic sky forever.
+        if (skyboxMaterial)
+        {
+            skyboxTintColor = Color.Lerp(skyboxTintColor, targetZone.SkyTint, zoneT);
+            skyboxMaterial.SetColor("_SkyTint", skyboxTintColor);
+            skyboxMaterial.SetColor("_GroundColor", skyboxTintColor * 0.35f);
+        }
+
+        // Purely a flavor timer -- ticks whenever gameplay input is active, independent of the
+        // marker-speed early-out below, so it can still fire during brief zero-speed moments.
+        ambientJoltTimer -= Time.deltaTime;
+        if (ambientJoltTimer <= 0f)
+        {
+            ambientJoltTimer = Random.Range(ambientJoltMinInterval, ambientJoltMaxInterval);
+            GameFeedbackSignals.RaiseAmbientCameraJolt(Random.Range(0.5f, 1f));
+        }
 
         float markerSpeed = RushTrackPerceptionMath.ResolveMarkerTravelSpeed(obstacleSpeed, rawPace, gameplayActive, cameraShakeEnabled);
+
+        if (speedDustSystem)
+        {
+            var dustVelocity = speedDustSystem.velocityOverLifetime;
+            dustVelocity.y = new ParticleSystem.MinMaxCurve(-Mathf.Max(4f, markerSpeed * 2.4f));
+        }
+
+        // Scroll the procedural grid texture along the track direction so the ground reads as
+        // actual moving terrain instead of a flat static color -- independent of the markerSpeed
+        // early-out below so the very first frames after a restart still show correct scroll.
+        if (trackSurfaceMaterial)
+        {
+            trackScrollY -= markerSpeed * Time.deltaTime * 0.12f;
+            trackSurfaceMaterial.mainTextureOffset = new Vector2(0f, trackScrollY);
+        }
+
+        // Same scroll trick, faster, on the lane-guidance lines -- reads as energy actively
+        // flowing down the corridor toward the ship rather than a static glowing stripe.
+        if (laneFlowMaterial)
+        {
+            laneFlowScrollY -= markerSpeed * Time.deltaTime * 0.4f;
+            laneFlowMaterial.mainTextureOffset = new Vector2(0f, laneFlowScrollY);
+        }
+
         if (markerSpeed <= 0.01f)
         {
             return;
@@ -310,6 +462,11 @@ public sealed class RushTrackEnvironment : MonoBehaviour
                 float scaleMultiplier = RushTrackPerceptionMath.ComputeApproachScale(heightT, nearScaleMultiplier, farScaleMultiplier);
                 element.Transform.localScale = element.BaseScale * scaleMultiplier;
             }
+
+            if (element.RotationSpeed != 0f)
+            {
+                element.Transform.Rotate(element.RotationAxis, element.RotationSpeed * deltaTime, Space.Self);
+            }
         }
     }
 
@@ -341,15 +498,26 @@ public sealed class RushTrackEnvironment : MonoBehaviour
 
         ResolveColumns();
         BuildMarkers();
-        BuildSkyline();
+        BuildAsteroidField();
         BuildSpeedStreaks();
+        BuildSpeedDust();
+        BuildStarfield();
+        BuildNebulaClouds();
+        ambientJoltTimer = Random.Range(ambientJoltMinInterval, ambientJoltMaxInterval);
         built = true;
     }
 
     private void BuildMaterials()
     {
-        trackSurfaceMaterial = CreateUnlitMaterial(new Color(0.045f, 0.058f, 0.09f));
+        // Procedurally textured instead of flat Unlit/Color -- a faint glowing grid line pattern
+        // gives the ground actual visual detail and, combined with the scroll in Update(), a real
+        // sense of the surface streaming past under the ship.
+        trackSurfaceMaterial = CreateGridMaterial(new Color(0.045f, 0.058f, 0.09f), new Color(0.22f, 0.5f, 0.62f));
         laneGlowMaterial = CreateUnlitMaterial(new Color(0.2f, 0.9f, 1f));
+        // Dedicated flowing-energy texture for the 3 lane-guidance lines specifically -- separate
+        // from laneGlowMaterial (still used by markers/rails/depth markers) so only the lines the
+        // player actually steers between get the "energy actively flowing toward you" cue.
+        laneFlowMaterial = CreateFlowMaterial(new Color(0.05f, 0.22f, 0.26f), new Color(0.55f, 1f, 1f));
         laneGlowBaseColor = laneGlowMaterial.color;
         structuralMaterial = CreateUnlitMaterial(new Color(0.12f, 0.16f, 0.24f));
         // Dim purple, echoing the existing boundary identity (M_Boundary) -- the previous bright
@@ -360,16 +528,42 @@ public sealed class RushTrackEnvironment : MonoBehaviour
         // Close to the scene's own fog color so far structures fade into the horizon instead of popping.
         horizonMaterial = CreateUnlitMaterial(new Color(0.05f, 0.07f, 0.14f));
 
-        // Dedicated skyline materials, deliberately separate from the track-shell/lane materials
-        // above -- so the roadside zone drift (city/market/coastal/dawn) only ever recolors
-        // passing buildings and never the track rails, lane guidance, or pace-driven glow.
-        RoadsideZone startZone = RoadsideZones[0];
-        buildingBodyMaterial = CreateUnlitMaterial(startZone.BodyColor);
-        buildingAccentMaterial = CreateUnlitMaterial(startZone.AccentColor);
-        buildingRoofMaterial = CreateUnlitMaterial(startZone.RoofColor);
-        buildingBodyColor = buildingBodyMaterial.color;
-        buildingAccentColor = buildingAccentMaterial.color;
-        buildingRoofColor = buildingRoofMaterial.color;
+        // Dedicated asteroid-field materials, deliberately separate from the track-shell/lane
+        // materials above -- so the space zone drift (void/belt/ice/nebula) only ever recolors
+        // the passing rocks and debris, never the flight-corridor rails, lane guidance, or the
+        // pace-driven glow.
+        //
+        // Unlike the track-shell materials (which stay Unlit for flat, always-readable gameplay
+        // guidance), the asteroid body and debris use a lit shader so SceneMoodController's
+        // directional light actually shades their faces -- this is what makes a primitive
+        // cube/sphere read as a solid rock with real volume instead of a flat-colored cutout. The
+        // vein/crystal/beacon material stays bright regardless of light angle via emission, so it
+        // still reads as glowing even on the shape's shadowed side.
+        SpaceZone startZone = SpaceZones[0];
+        asteroidBodyMaterial = CreateLitMaterial(startZone.BodyColor, metallic: 0.05f, smoothness: 0.18f);
+        debrisMaterial = CreateLitMaterial(startZone.RoofColor, metallic: 0.55f, smoothness: 0.45f);
+        asteroidVeinMaterial = CreateEmissiveMaterial(startZone.AccentColor);
+        asteroidBodyColor = asteroidBodyMaterial.color;
+        asteroidVeinColor = startZone.AccentColor;
+        debrisColor = debrisMaterial.color;
+
+        // Replaces Unity's stock default skybox (the previous, unmodified backdrop) with a tuned
+        // dark-space procedural sky -- tiny/near-invisible sun, thin atmosphere, dark zone-tinted
+        // sky/ground -- so the "atmosphere" itself finally has an authored look instead of the
+        // engine default, and drifts per-zone in Update() alongside everything else.
+        Shader proceduralSkyShader = Shader.Find("Skybox/Procedural");
+        if (proceduralSkyShader)
+        {
+            skyboxMaterial = new Material(proceduralSkyShader);
+            skyboxMaterial.SetFloat("_SunSize", 0.015f);
+            skyboxMaterial.SetFloat("_SunSizeConvergence", 8f);
+            skyboxMaterial.SetFloat("_AtmosphereThickness", 0.35f);
+            skyboxMaterial.SetFloat("_Exposure", 0.85f);
+            skyboxMaterial.SetColor("_SkyTint", startZone.SkyTint);
+            skyboxMaterial.SetColor("_GroundColor", startZone.SkyTint * 0.35f);
+            skyboxTintColor = startZone.SkyTint;
+            RenderSettings.skybox = skyboxMaterial;
+        }
     }
 
     private Material CreateUnlitMaterial(Color color)
@@ -379,14 +573,107 @@ public sealed class RushTrackEnvironment : MonoBehaviour
         return material;
     }
 
+    // Builds a small, tileable, repeat-wrapped grid-line texture at runtime (same SetPixels/Apply
+    // approach as SoftParticleMaterial) and applies it via Sprites/Default -- unlike Unlit/Color,
+    // this shader actually supports a _MainTex, which is what lets the track surface show a
+    // pattern at all instead of one flat color. mainTextureScale tiles it across the real track
+    // dimensions so grid cells read as a consistent physical size regardless of track width/length.
+    private Material CreateGridMaterial(Color baseColor, Color lineColor)
+    {
+        const int size = 64;
+        const int lineThickness = 3;
+        var texture = new Texture2D(size, size, TextureFormat.RGBA32, false)
+        {
+            wrapMode = TextureWrapMode.Repeat,
+            filterMode = FilterMode.Bilinear,
+            name = "TrackGridTexture"
+        };
+
+        var pixels = new Color[size * size];
+        for (int y = 0; y < size; y++)
+        {
+            bool onHorizontalLine = y < lineThickness;
+            for (int x = 0; x < size; x++)
+            {
+                bool onVerticalLine = x < lineThickness;
+                pixels[y * size + x] = (onHorizontalLine || onVerticalLine) ? lineColor : baseColor;
+            }
+        }
+
+        texture.SetPixels(pixels);
+        texture.Apply(false, false);
+
+        var material = new Material(Shader.Find("Sprites/Default"));
+        material.mainTexture = texture;
+        material.color = Color.white;
+        material.mainTextureScale = new Vector2(Mathf.Max(1f, trackHalfWidth * 2f / 2.2f), Mathf.Max(1f, trackLength / 2.2f));
+        return material;
+    }
+
+    // A thin repeating "pulse" texture (bright dash, dark gap) for the lane-guidance lines --
+    // combined with the scrolling offset in Update(), it reads as energy segments continuously
+    // traveling down the corridor rather than one static glowing strip.
+    private Material CreateFlowMaterial(Color baseColor, Color pulseColor)
+    {
+        const int size = 32;
+        const int pulseBand = 7;
+        var texture = new Texture2D(1, size, TextureFormat.RGBA32, false)
+        {
+            wrapMode = TextureWrapMode.Repeat,
+            filterMode = FilterMode.Bilinear,
+            name = "LaneFlowTexture"
+        };
+
+        var pixels = new Color[size];
+        for (int y = 0; y < size; y++)
+        {
+            pixels[y] = y < pulseBand ? pulseColor : baseColor;
+        }
+
+        texture.SetPixels(pixels);
+        texture.Apply(false, false);
+
+        var material = new Material(Shader.Find("Sprites/Default"));
+        material.mainTexture = texture;
+        material.color = Color.white;
+        material.mainTextureScale = new Vector2(1f, Mathf.Max(1f, trackLength / 6f));
+        return material;
+    }
+
+    // Lit (Standard shader) material -- picks up SceneMoodController's directional light so the
+    // primitive rock/debris shapes actually shade across their faces instead of rendering as flat
+    // single-tone silhouettes. Kept separate from the track-shell's Unlit materials, which need to
+    // stay flat and equally bright at any light angle for gameplay legibility.
+    private Material CreateLitMaterial(Color color, float metallic, float smoothness)
+    {
+        var material = new Material(Shader.Find("Standard"));
+        material.color = color;
+        material.SetFloat("_Metallic", metallic);
+        material.SetFloat("_Glossiness", smoothness);
+        return material;
+    }
+
+    // Self-lit material for veins/crystals/beacons: stays visibly glowing regardless of the
+    // directional light's angle or color, so the "energy crack in the rock" reads clearly even on
+    // a shape's shadowed side, and blooms softly under the existing post-processing bloom.
+    private Material CreateEmissiveMaterial(Color color)
+    {
+        var material = new Material(Shader.Find("Standard"));
+        material.color = color * 0.6f;
+        material.EnableKeyword("_EMISSION");
+        material.globalIlluminationFlags = MaterialGlobalIlluminationFlags.RealtimeEmissive;
+        material.SetColor("_EmissionColor", color * VeinEmissionIntensity);
+        return material;
+    }
+
     private void BuildTrackShell()
     {
         CreateStaticCube("TrackSurface", visualRoot, new Vector3(0f, 0f, TrackCenterZ), new Vector3(trackHalfWidth * 2f, 0.08f, trackLength), trackSurfaceMaterial);
         CreateStaticCube("TrackCenterSpine", visualRoot, new Vector3(0f, 0.045f, TrackCenterZ), new Vector3(0.2f, 0.05f, trackLength), structuralMaterial);
 
-        CreateStaticCube("LaneGuidanceLeft", visualRoot, new Vector3(-2.5f, 0.055f, TrackCenterZ), new Vector3(0.12f, 0.03f, trackLength), laneGlowMaterial);
-        CreateStaticCube("LaneGuidanceCenter", visualRoot, new Vector3(0f, 0.055f, TrackCenterZ), new Vector3(0.12f, 0.03f, trackLength), laneGlowMaterial);
-        CreateStaticCube("LaneGuidanceRight", visualRoot, new Vector3(2.5f, 0.055f, TrackCenterZ), new Vector3(0.12f, 0.03f, trackLength), laneGlowMaterial);
+        CreateStaticCube("LaneGuidanceLeft", visualRoot, new Vector3(-2.5f, 0.055f, TrackCenterZ), new Vector3(0.12f, 0.03f, trackLength), laneFlowMaterial);
+        CreateStaticCube("LaneGuidanceCenter", visualRoot, new Vector3(0f, 0.055f, TrackCenterZ), new Vector3(0.12f, 0.03f, trackLength), laneFlowMaterial);
+        CreateStaticCube("LaneGuidanceRight", visualRoot, new Vector3(2.5f, 0.055f, TrackCenterZ), new Vector3(0.12f, 0.03f, trackLength), laneFlowMaterial);
 
         CreateStaticCube("LaneSeparatorLeft", visualRoot, new Vector3(-1.25f, 0.05f, TrackCenterZ), new Vector3(0.08f, 0.03f, trackLength), structuralMaterial);
         CreateStaticCube("LaneSeparatorRight", visualRoot, new Vector3(1.25f, 0.05f, TrackCenterZ), new Vector3(0.08f, 0.03f, trackLength), structuralMaterial);
@@ -460,13 +747,38 @@ public sealed class RushTrackEnvironment : MonoBehaviour
         return cube;
     }
 
-    // Rotated variant -- used only for pitched roofs/awnings (market stalls, coastal huts) where
-    // a flat axis-aligned cube can't read as a sloped surface.
+    // Rotated variant -- used for tilted solar panels/rings and jaggedly-angled rock shards where
+    // a flat axis-aligned cube can't read as a sloped or tumbling surface.
     private static GameObject CreateStaticCube(string name, Transform parent, Vector3 localPosition, Vector3 localScale, Material material, Quaternion localRotation)
     {
         GameObject cube = CreateStaticCube(name, parent, localPosition, localScale, material);
         cube.transform.localRotation = localRotation;
         return cube;
+    }
+
+    // Sphere variant -- used only for the distant ringed-planetoid silhouette, so it reads as a
+    // round world rather than another rock block.
+    private static GameObject CreateStaticSphere(string name, Transform parent, Vector3 localPosition, Vector3 localScale, Material material)
+    {
+        GameObject sphere = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        sphere.name = name;
+        sphere.transform.SetParent(parent, false);
+        sphere.transform.localPosition = localPosition;
+        sphere.transform.localScale = localScale;
+
+        var collider = sphere.GetComponent<Collider>();
+        if (collider)
+        {
+            Destroy(collider);
+        }
+
+        var renderer = sphere.GetComponent<Renderer>();
+        if (renderer && material)
+        {
+            renderer.sharedMaterial = material;
+        }
+
+        return sphere;
     }
 
     private void ResolveColumns()
@@ -558,11 +870,12 @@ public sealed class RushTrackEnvironment : MonoBehaviour
         }
     }
 
-    // Varied roadside skyline: replaces the old closed tunnel-ring frames. Nothing here spans
-    // the track (no left-to-right beam), so the forward path always reads as open. Shape, size,
-    // material and depth all vary by index so the sides read as passing scenery instead of a
-    // repeating, mechanical pattern.
-    private void BuildSkyline()
+    // Varied flanking asteroid field: replaces the old closed tunnel-ring frames. Nothing here
+    // spans the track (no left-to-right beam), so the forward path always reads as open. Shape,
+    // size, material, rotation and depth all vary by index so the sides read as a real field of
+    // tumbling rock and drifting debris rather than a repeating, mechanical pattern -- exactly
+    // the "ship is genuinely traveling" cue the space theme is built around.
+    private void BuildAsteroidField()
     {
         int perSide = Mathf.Max(4, frameRows);
         sidePanels = new MovingElement[perSide * 2];
@@ -573,111 +886,132 @@ public sealed class RushTrackEnvironment : MonoBehaviour
             float t = perSide > 1 ? row / (float)(perSide - 1) : 0f;
             float y = Mathf.Lerp(sidePanelBottomY, sidePanelTopY, t);
 
-            index = BuildSkylineBuilding(index, row, -1f, y, t);
-            index = BuildSkylineBuilding(index, row, 1f, y, t);
+            index = BuildAsteroidCluster(index, row, -1f, y, t);
+            index = BuildAsteroidCluster(index, row, 1f, y, t);
         }
     }
 
-    private int BuildSkylineBuilding(int index, int row, float side, float y, float t)
+    private int BuildAsteroidCluster(int index, int row, float side, float y, float t)
     {
-        // Deterministic pseudo-variety (no gameplay RNG involved): shape/material/offset all
-        // derive from the row index so the pattern is stable but never uniform. Six shapes now
-        // (was four) so a single screenful of scenery already reads as mixed -- towers next to
-        // low blocks next to market stalls next to huts -- rather than one repeating silhouette;
-        // the shared body/accent/roof materials are then separately drifted by score/zone in
-        // Update(), so the same shapes also change palette as the run travels through terrain.
+        // Deterministic pseudo-variety (no gameplay RNG involved): shape/material/offset/tilt all
+        // derive from the row index so the pattern is stable but never uniform. Six archetypes --
+        // rock shard, boulder, layered spire, antenna-studded rock, drifting satellite debris, and
+        // a distant ringed planetoid -- so a single screenful already reads as a mixed field rather
+        // than one repeating silhouette; the shared rock/vein/debris materials are then separately
+        // drifted by score/zone in Update(), so the same shapes also change palette across a run.
         int shape = row % 6;
         float jitter = (row * 0.61803f) % 1f; // golden-ratio spacing avoids visible repeats
         float depthSpan = Mathf.Lerp(3.5f, 13f, t);
         float x = side * (outerPillarX + 1.4f + jitter * 2.6f);
         float z = TrackCenterZ + Mathf.Lerp(4f, 11f, (t + jitter) % 1f) + depthSpan * 0.001f;
 
-        Transform building = new GameObject($"Building_{row}_{(side < 0f ? "L" : "R")}").transform;
-        building.SetParent(sidePanelRoot, false);
-        building.localPosition = new Vector3(x, y, z);
+        Transform asteroid = new GameObject($"Asteroid_{row}_{(side < 0f ? "L" : "R")}").transform;
+        asteroid.SetParent(sidePanelRoot, false);
+        asteroid.localPosition = new Vector3(x, y, z);
+        // A fixed per-instance tilt (derived from jitter, not gameplay RNG) so rocks read as
+        // tumbling debris caught mid-spin rather than neatly axis-aligned blocks.
+        asteroid.localRotation = Quaternion.Euler(jitter * 47f, jitter * 121f, jitter * 83f);
 
-        // Shape 2 keeps borrowing the fog-matched horizon material (it already tracks the scene's
-        // own mood-driven fog color), every other shape uses the dedicated, zone-driven skyline
-        // materials so the whole roadside shifts together as the run's terrain changes.
-        Material bodyMat = shape == 2 ? horizonMaterial : buildingBodyMaterial;
-        Material accentMat = buildingAccentMaterial;
-        Material roofMat = buildingRoofMaterial;
+        // Every shape shares the same dedicated, lit, zone-driven asteroid body material so the
+        // whole field both shifts color together as the run travels through deep space and shades
+        // consistently under SceneMoodController's directional light -- horizonMaterial stays
+        // reserved for the two flat, always-hazy HorizonSilhouette pillars in BuildHorizonSilhouettes.
+        Material bodyMat = asteroidBodyMaterial;
+        Material veinMat = asteroidVeinMaterial;
+        Material metalMat = debrisMaterial;
+
+        // Slow constant tumble, a little faster for the smaller/closer shapes so it stays readable
+        // as background motion rather than becoming a distracting blur.
+        Vector3 rotationAxis = new Vector3(Mathf.Sin(jitter * 6.28f), Mathf.Cos(jitter * 4.2f), Mathf.Sin(jitter * 2.5f)).normalized;
+        float rotationSpeed = Mathf.Lerp(14f, 5f, t);
 
         switch (shape)
         {
-            case 0: // slim tower with a single glow stripe
+            case 0: // elongated rock shard with a glowing mineral crack and a chipped corner
             {
                 float h = Mathf.Lerp(1.6f, 3.4f, t);
-                CreateStaticCube("Body", building, Vector3.zero, new Vector3(0.5f, h, 0.5f), bodyMat);
-                CreateStaticCube("Stripe", building, new Vector3(0f, h * 0.3f, 0.26f), new Vector3(0.08f, h * 0.5f, 0.02f), accentMat);
+                CreateStaticCube("Body", asteroid, Vector3.zero, new Vector3(0.5f, h, 0.5f), bodyMat);
+                CreateStaticCube("Vein", asteroid, new Vector3(0f, h * 0.3f, 0.26f), new Vector3(0.08f, h * 0.5f, 0.02f), veinMat);
+                // Small angled chunk offset from the main shaft -- extra face normals catch the
+                // directional light differently from the body, so the shard reads as a broken,
+                // faceted piece of rock instead of a single flat-shaded box.
+                CreateStaticCube(
+                    "Chip", asteroid,
+                    new Vector3(0.22f, -h * 0.32f, 0.1f),
+                    new Vector3(0.32f, h * 0.22f, 0.34f),
+                    bodyMat,
+                    Quaternion.Euler(14f, 33f, -21f));
                 break;
             }
-            case 1: // wide low block
+            case 1: // squat boulder with a bright mineral seam across the top and a broken-off chunk
             {
                 float h = Mathf.Lerp(1f, 2f, t);
-                CreateStaticCube("Body", building, Vector3.zero, new Vector3(1.1f, h, 0.7f), bodyMat);
-                CreateStaticCube("Roofline", building, new Vector3(0f, h * 0.5f + 0.03f, 0f), new Vector3(1.15f, 0.06f, 0.75f), accentMat);
+                CreateStaticCube("Body", asteroid, Vector3.zero, new Vector3(1.1f, h, 0.7f), bodyMat);
+                CreateStaticCube("Seam", asteroid, new Vector3(0f, h * 0.5f + 0.03f, 0f), new Vector3(1.15f, 0.06f, 0.75f), veinMat);
+                // Same reasoning as the rock shard's "Chip": a second, differently-angled mass
+                // breaks up the single-box silhouette so shading reveals distinct facets.
+                CreateStaticCube(
+                    "Chip", asteroid,
+                    new Vector3(-0.55f, -h * 0.28f, 0.28f),
+                    new Vector3(0.5f, h * 0.42f, 0.42f),
+                    bodyMat,
+                    Quaternion.Euler(-11f, 26f, 17f));
                 break;
             }
-            case 2: // tall building with two window bands
+            case 2: // layered rock spire with two glowing crystal bands
             {
                 float h = Mathf.Lerp(2.2f, 4.4f, t);
-                CreateStaticCube("Body", building, Vector3.zero, new Vector3(0.8f, h, 0.6f), bodyMat);
-                CreateStaticCube("BandLow", building, new Vector3(0f, -h * 0.18f, 0.31f), new Vector3(0.62f, 0.1f, 0.02f), accentMat);
-                CreateStaticCube("BandHigh", building, new Vector3(0f, h * 0.28f, 0.31f), new Vector3(0.62f, 0.1f, 0.02f), accentMat);
+                CreateStaticCube("Body", asteroid, Vector3.zero, new Vector3(0.8f, h, 0.6f), bodyMat);
+                CreateStaticCube("VeinLow", asteroid, new Vector3(0f, -h * 0.18f, 0.31f), new Vector3(0.62f, 0.1f, 0.02f), veinMat);
+                CreateStaticCube("VeinHigh", asteroid, new Vector3(0f, h * 0.28f, 0.31f), new Vector3(0.62f, 0.1f, 0.02f), veinMat);
                 break;
             }
-            case 3: // block with a rooftop spire/antenna
+            case 3: // rock with a broken satellite antenna embedded in it, distress beacon still lit
             {
                 float h = Mathf.Lerp(1.4f, 2.6f, t);
-                CreateStaticCube("Body", building, Vector3.zero, new Vector3(0.7f, h, 0.7f), bodyMat);
-                CreateStaticCube("Spire", building, new Vector3(0f, h * 0.5f + 0.5f, 0f), new Vector3(0.08f, 1f, 0.08f), accentMat);
-                CreateStaticCube("Beacon", building, new Vector3(0f, h * 0.5f + 1.02f, 0f), new Vector3(0.16f, 0.16f, 0.16f), accentMat);
+                CreateStaticCube("Body", asteroid, Vector3.zero, new Vector3(0.7f, h, 0.7f), bodyMat);
+                CreateStaticCube("Antenna", asteroid, new Vector3(0f, h * 0.5f + 0.5f, 0f), new Vector3(0.08f, 1f, 0.08f), metalMat);
+                CreateStaticCube("Beacon", asteroid, new Vector3(0f, h * 0.5f + 1.02f, 0f), new Vector3(0.16f, 0.16f, 0.16f), veinMat);
                 break;
             }
-            case 4: // market stall -- low counter, tilted awning, support post
+            case 4: // drifting broken satellite -- metal hull, support strut, tilted solar panel
             {
                 float h = Mathf.Lerp(0.9f, 1.5f, t);
-                CreateStaticCube("Body", building, Vector3.zero, new Vector3(0.9f, h, 0.6f), bodyMat);
-                CreateStaticCube("Post", building, new Vector3(0.36f, h * 0.5f + 0.22f, 0.36f), new Vector3(0.06f, 0.45f, 0.06f), accentMat);
+                CreateStaticCube("Hull", asteroid, Vector3.zero, new Vector3(0.9f, h, 0.6f), metalMat);
+                CreateStaticCube("Strut", asteroid, new Vector3(0.36f, h * 0.5f + 0.22f, 0.36f), new Vector3(0.06f, 0.45f, 0.06f), veinMat);
                 CreateStaticCube(
-                    "Awning", building,
+                    "SolarPanel", asteroid,
                     new Vector3(0f, h * 0.5f + 0.42f, 0.34f),
                     new Vector3(1.05f, 0.06f, 0.5f),
-                    roofMat,
+                    veinMat,
                     Quaternion.Euler(18f, 0f, 0f));
                 break;
             }
-            default: // coastal hut -- low walls under a pitched, two-sided roof
+            default: // distant ringed planetoid
             {
-                float h = Mathf.Lerp(0.8f, 1.3f, t);
-                CreateStaticCube("Body", building, Vector3.zero, new Vector3(0.85f, h, 0.75f), bodyMat);
+                float radius = Mathf.Lerp(0.55f, 1f, t);
+                CreateStaticSphere("Body", asteroid, Vector3.zero, new Vector3(radius, radius, radius) * 2f, bodyMat);
                 CreateStaticCube(
-                    "RoofLeft", building,
-                    new Vector3(-0.22f, h * 0.5f + 0.18f, 0f),
-                    new Vector3(0.6f, 0.08f, 0.85f),
-                    roofMat,
-                    Quaternion.Euler(0f, 0f, 26f));
-                CreateStaticCube(
-                    "RoofRight", building,
-                    new Vector3(0.22f, h * 0.5f + 0.18f, 0f),
-                    new Vector3(0.6f, 0.08f, 0.85f),
-                    roofMat,
-                    Quaternion.Euler(0f, 0f, -26f));
-                CreateStaticCube("Doorway", building, new Vector3(0f, -h * 0.32f, 0.38f), new Vector3(0.26f, h * 0.36f, 0.03f), accentMat);
+                    "Ring", asteroid,
+                    Vector3.zero,
+                    new Vector3(radius * 3.2f, 0.05f, radius * 3.2f),
+                    veinMat,
+                    Quaternion.Euler(78f, 0f, 18f));
                 break;
             }
         }
 
         sidePanels[index] = new MovingElement
         {
-            Transform = building,
+            Transform = asteroid,
             BaseScale = Vector3.one,
-            // NEAR-ish band: same read as the previous side panels, just varied in shape now.
+            // NEAR-ish band: same read as the previous flanking scenery, just varied in shape now.
             SpeedMultiplier = 1.55f,
             MinY = sidePanelBottomY,
             MaxY = sidePanelTopY,
-            UsesDepthScale = false
+            UsesDepthScale = false,
+            RotationAxis = rotationAxis,
+            RotationSpeed = rotationSpeed
         };
 
         return index + 1;
@@ -717,5 +1051,150 @@ public sealed class RushTrackEnvironment : MonoBehaviour
         };
 
         return index + 1;
+    }
+
+    // Fine glowing dust filling the tunnel volume around the ship, streaking downward at the
+    // same "things sliding past overhead" direction as every other band (Update() decreases
+    // local Y). Purely an extra near-speed cue layered on top of the existing cube streaks --
+    // no collider, never read by gameplay/fairness. Speed is refreshed every frame in Update()
+    // from the same markerSpeed the cube bands use, so it always tracks current pace.
+    private void BuildSpeedDust()
+    {
+        var dustObject = new GameObject("SpeedDust");
+        dustObject.transform.SetParent(visualRoot, false);
+        dustObject.transform.localPosition = new Vector3(0f, (markerTopY + markerBottomY) * 0.5f, TrackCenterZ);
+
+        speedDustSystem = dustObject.AddComponent<ParticleSystem>();
+
+        var main = speedDustSystem.main;
+        main.loop = true;
+        main.playOnAwake = true;
+        main.startLifetime = dustLifetime;
+        main.startSpeed = 0f;
+        main.startSize = new ParticleSystem.MinMaxCurve(0.03f, 0.09f);
+        main.startColor = new Color(0.8f, 0.95f, 1f, 0.85f);
+        main.simulationSpace = ParticleSystemSimulationSpace.Local;
+        main.gravityModifier = 0f;
+        main.maxParticles = 250;
+
+        var emission = speedDustSystem.emission;
+        emission.rateOverTime = dustEmissionRate;
+
+        var shape = speedDustSystem.shape;
+        shape.shapeType = ParticleSystemShapeType.Box;
+        shape.scale = new Vector3(trackHalfWidth * 1.6f, markerTopY - markerBottomY, 1.5f);
+        shape.randomDirectionAmount = 0f;
+
+        // Explicit local-space velocity instead of relying on the shape's own emit direction --
+        // unambiguous, and Update() rewrites the Y term every frame to track current pace.
+        var velocityOverLifetime = speedDustSystem.velocityOverLifetime;
+        velocityOverLifetime.enabled = true;
+        velocityOverLifetime.space = ParticleSystemSimulationSpace.Local;
+        velocityOverLifetime.y = new ParticleSystem.MinMaxCurve(-12f);
+
+        var colorOverLifetime = speedDustSystem.colorOverLifetime;
+        colorOverLifetime.enabled = true;
+        var gradient = new Gradient();
+        gradient.SetKeys(
+            new[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(Color.white, 1f) },
+            new[]
+            {
+                new GradientAlphaKey(0f, 0f),
+                new GradientAlphaKey(0.8f, 0.15f),
+                new GradientAlphaKey(0f, 1f)
+            });
+        colorOverLifetime.color = gradient;
+
+        var particleRenderer = dustObject.GetComponent<ParticleSystemRenderer>();
+        particleRenderer.material = SoftParticleMaterial.Create();
+        particleRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        particleRenderer.receiveShadows = false;
+    }
+
+    // A large, fully static field of distant points scattered through the whole visible volume --
+    // built once and never touched again (no per-frame cost). Gives the backdrop actual depth and
+    // texture instead of just an empty tinted sky behind the flanking asteroids, directly answering
+    // the "atmosphere looks plain" complaint alongside the new procedural skybox.
+    private void BuildStarfield()
+    {
+        var starsObject = new GameObject("Starfield");
+        starsObject.transform.SetParent(visualRoot, false);
+        starsObject.transform.localPosition = new Vector3(0f, 8f, TrackCenterZ + trackLength * 0.25f);
+
+        var stars = starsObject.AddComponent<ParticleSystem>();
+        starfieldSystem = stars;
+        var main = stars.main;
+        main.loop = false;
+        main.playOnAwake = true;
+        main.startLifetime = 999f;
+        main.startSpeed = 0f;
+        main.startSize = new ParticleSystem.MinMaxCurve(0.05f, 0.18f);
+        main.startColor = new ParticleSystem.MinMaxGradient(new Color(0.75f, 0.85f, 1f, 1f), Color.white);
+        main.simulationSpace = ParticleSystemSimulationSpace.Local;
+        main.gravityModifier = 0f;
+        // Mobile fill-rate budget: a one-time burst (zero per-frame emission cost either way), but
+        // fewer/smaller sprites still means less overdraw on low-end GPUs. 260 is still plenty dense
+        // for a backdrop nobody looks at closely.
+        main.maxParticles = 260;
+
+        var emission = stars.emission;
+        emission.rateOverTime = 0f;
+        emission.SetBursts(new[] { new ParticleSystem.Burst(0f, 260) });
+
+        var shape = stars.shape;
+        shape.shapeType = ParticleSystemShapeType.Box;
+        shape.scale = new Vector3(outerPillarX * 5f, 46f, trackLength * 2.4f);
+        shape.randomDirectionAmount = 0f;
+
+        var particleRenderer = starsObject.GetComponent<ParticleSystemRenderer>();
+        particleRenderer.material = SoftParticleMaterial.Create();
+        particleRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        particleRenderer.receiveShadows = false;
+
+        stars.Play();
+    }
+
+    // A handful of large, very soft, low-alpha colored puffs scattered far behind the track --
+    // built once and fully static, like the starfield. Gives the backdrop actual atmospheric
+    // depth/color instead of just points-of-light on a flat tinted sky, without needing any new
+    // imported art (reuses the same SoftParticleMaterial already used for dust/stars).
+    private void BuildNebulaClouds()
+    {
+        var nebulaObject = new GameObject("NebulaClouds");
+        nebulaObject.transform.SetParent(visualRoot, false);
+        nebulaObject.transform.localPosition = new Vector3(0f, 10f, TrackCenterZ + trackLength * 0.3f);
+
+        var nebula = nebulaObject.AddComponent<ParticleSystem>();
+        nebulaSystem = nebula;
+        var main = nebula.main;
+        main.loop = false;
+        main.playOnAwake = true;
+        main.startLifetime = 999f;
+        main.startSpeed = 0f;
+        // Large soft alpha-blended quads are the single most expensive thing to overdraw on a
+        // mobile GPU (fill-rate, not particle count, is the real cost) -- kept fewer and slightly
+        // smaller than the first pass so this stays a cheap background tint rather than a
+        // full-screen overdraw hazard on low-end Android hardware.
+        main.startSize = new ParticleSystem.MinMaxCurve(4f, 9f);
+        main.startColor = new ParticleSystem.MinMaxGradient(new Color(0.35f, 0.25f, 0.55f, 0.14f), new Color(0.22f, 0.42f, 0.58f, 0.1f));
+        main.simulationSpace = ParticleSystemSimulationSpace.Local;
+        main.gravityModifier = 0f;
+        main.maxParticles = 10;
+
+        var emission = nebula.emission;
+        emission.rateOverTime = 0f;
+        emission.SetBursts(new[] { new ParticleSystem.Burst(0f, 10) });
+
+        var shape = nebula.shape;
+        shape.shapeType = ParticleSystemShapeType.Box;
+        shape.scale = new Vector3(outerPillarX * 6f, 30f, trackLength * 2f);
+        shape.randomDirectionAmount = 0f;
+
+        var particleRenderer = nebulaObject.GetComponent<ParticleSystemRenderer>();
+        particleRenderer.material = SoftParticleMaterial.Create();
+        particleRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        particleRenderer.receiveShadows = false;
+
+        nebula.Play();
     }
 }

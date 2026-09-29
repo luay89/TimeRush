@@ -30,11 +30,22 @@ public sealed class ResultsProgressionTests
     {
         // Stored best lower than the final score: displayed best is promoted to the run score.
         ResultsPresentation.DisplayData higher = ResultsPresentation.Build(1200, 800, true, RunLossReason.None);
-        Assert.That(higher.BestScoreText, Is.EqualTo("Best: 1200"));
+        Assert.That(higher.BestScoreText, Is.EqualTo("Best: 1200   //   Today: 1200"));
 
         // Stored best higher than the final score: displayed best remains the stored best.
         ResultsPresentation.DisplayData lower = ResultsPresentation.Build(400, 2600, false, RunLossReason.None);
-        Assert.That(lower.BestScoreText, Is.EqualTo("Best: 2600"));
+        Assert.That(lower.BestScoreText, Is.EqualTo("Best: 2600   //   Today: 400"));
+    }
+
+    // Best Today shows the stored daily best when it beats this run, and never drops below the run score.
+    [Test]
+    public void ResultsDailyBest_UsesStoredDailyBestAndNeverRegressesBelowFinalScore()
+    {
+        ResultsPresentation.DisplayData storedHigher = ResultsPresentation.Build(400, 2600, false, RunLossReason.None, 900);
+        Assert.That(storedHigher.BestScoreText, Is.EqualTo("Best: 2600   //   Today: 900"));
+
+        ResultsPresentation.DisplayData storedLower = ResultsPresentation.Build(1200, 2600, false, RunLossReason.None, 700);
+        Assert.That(storedLower.BestScoreText, Is.EqualTo("Best: 2600   //   Today: 1200"));
     }
 
     // G — Rank matches the existing ProgressionConfig thresholds using the REAL authored asset.

@@ -15,6 +15,8 @@ public class ScoreUIBinder : MonoBehaviour
     [SerializeField] private TextMeshProUGUI statusLabel;
     [SerializeField] private TextMeshProUGUI paceLabel;
     [SerializeField] private TextMeshProUGUI flowLabel;
+    [SerializeField] private TextMeshProUGUI zoneAnnounceLabel;
+    [SerializeField] private TextMeshProUGUI depthGaugeLabel;
     [SerializeField] private FeedbackConfig feedbackConfig;
 
     private int lastBest = int.MinValue;
@@ -23,10 +25,25 @@ public class ScoreUIBinder : MonoBehaviour
     private int lastDisplayedFlow = int.MinValue;
     private float feedbackTimer;
 
+    // Simple story layer: a one-line "radio message" whenever the run crosses into a new named
+    // space zone, using the same score thresholds the visuals already change at. -1 so the very
+    // first zone (DEEP VOID, threshold 0) still announces itself at run start.
+    private int lastAnnouncedZoneIndex = -1;
+    private float zoneAnnounceTimer;
+    private const float ZoneAnnounceDuration = 3.2f;
+
+    // Depth-readability gauge: shows which of the 3 depth zones the player currently occupies, plus
+    // the real per-depth obstacle spawn counts from ObstacleSpawner -- so forward/backward movement
+    // is visually legible in the moment, and a real playtest can see the actual depth distribution
+    // on-screen instead of relying on impression alone.
+    private PlayerController cachedPlayer;
+    private string lastDepthGaugeText;
+
     private static readonly Color Cyan = new Color(0.12f, 0.95f, 1f, 1f);
     private static readonly Color Violet = new Color(0.62f, 0.35f, 1f, 1f);
     private static readonly Color Muted = new Color(0.68f, 0.76f, 0.9f, 0.92f);
     private static readonly Color White = new Color(0.96f, 0.98f, 1f, 1f);
+    private static readonly Color Amber = new Color(1f, 0.78f, 0.32f, 1f);
 
     private void Start()
     {
@@ -55,6 +72,8 @@ public class ScoreUIBinder : MonoBehaviour
         }
 
         RefreshHud(gc, true);
+        RefreshZoneAnnouncement(gc);
+        RefreshDepthGauge();
     }
 
     private void OnDestroy()
@@ -78,6 +97,16 @@ public class ScoreUIBinder : MonoBehaviour
             feedbackTimer = Mathf.Max(0f, feedbackTimer - Time.deltaTime);
         }
 
+        if (zoneAnnounceTimer > 0f)
+        {
+            zoneAnnounceTimer = Mathf.Max(0f, zoneAnnounceTimer - Time.deltaTime);
+
+            if (zoneAnnounceTimer <= 0f && zoneAnnounceLabel)
+            {
+                zoneAnnounceLabel.SetText(string.Empty);
+            }
+        }
+
         var gc = GameController.Instance;
         if (gc == null)
         {
@@ -85,6 +114,8 @@ public class ScoreUIBinder : MonoBehaviour
         }
 
         RefreshHud(gc, false);
+        RefreshZoneAnnouncement(gc);
+        RefreshDepthGauge();
     }
 
     private void EnsureRuntimeHud()
@@ -106,11 +137,21 @@ public class ScoreUIBinder : MonoBehaviour
         statusLabel = statusLabel ? statusLabel : CreateLabel("StatusLabel");
         paceLabel = paceLabel ? paceLabel : CreateLabel("PaceLabel");
         flowLabel = flowLabel ? flowLabel : CreateLabel("FlowLabel");
+        zoneAnnounceLabel = zoneAnnounceLabel ? zoneAnnounceLabel : CreateLabel("ZoneAnnounceLabel");
+        depthGaugeLabel = depthGaugeLabel ? depthGaugeLabel : CreateLabel("DepthGaugeLabel");
 
         ConfigureExistingLabel(survivalTimeLabel, TextAlignmentOptions.Center, 48f, White, new Vector2(0f, -46f), new Vector2(430f, 86f), new Vector2(0.5f, 1f));
         ConfigureExistingLabel(statusLabel, TextAlignmentOptions.Center, 22f, Cyan, new Vector2(0f, -126f), new Vector2(640f, 48f), new Vector2(0.5f, 1f));
         ConfigureExistingLabel(paceLabel, TextAlignmentOptions.Right, 24f, Violet, new Vector2(-56f, -112f), new Vector2(360f, 48f), new Vector2(1f, 1f));
         ConfigureExistingLabel(flowLabel, TextAlignmentOptions.Left, 24f, Violet, new Vector2(56f, -150f), new Vector2(420f, 50f), new Vector2(0f, 1f));
+        // Placed above the survival timer, at top-center, so a zone message reads like an incoming
+        // transmission rather than competing with the near-miss/challenge popups on statusLabel.
+        ConfigureExistingLabel(zoneAnnounceLabel, TextAlignmentOptions.Center, 26f, Amber, new Vector2(0f, -180f), new Vector2(760f, 52f), new Vector2(0.5f, 1f));
+        zoneAnnounceLabel?.SetText(string.Empty);
+
+        // Bottom-center, out of the way of every other HUD element -- a quiet readout rather than
+        // another competing headline number.
+        ConfigureExistingLabel(depthGaugeLabel, TextAlignmentOptions.Center, 20f, Muted, new Vector2(0f, 66f), new Vector2(760f, 44f), new Vector2(0.5f, 0f));
     }
 
     private TextMeshProUGUI FindLabel(string objectName)
@@ -207,6 +248,81 @@ public class ScoreUIBinder : MonoBehaviour
                 statusLabel.SetText(opacity > 0.02f ? "A/D or Swipe: Lane  //  W/S or Swipe: Depth" : string.Empty);
             }
         }
+    }
+
+    /// <summary>
+    /// Simple story layer: announces a short "radio message" the moment the run crosses into a new
+    /// named space zone (DEEP VOID / ASTEROID BELT / ICE COMET FIELD / NEBULA CORE), reusing the
+    /// same score thresholds RushTrackEnvironment and SceneMoodController already change look at --
+    /// so the narrative beat always lines up with the visual one without touching that tuned code.
+    /// </summary>
+    private void RefreshZoneAnnouncement(GameController gc)
+    {
+        if (!zoneAnnounceLabel)
+        {
+            return;
+        }
+
+        int zoneIndex = SpaceZoneCatalog.ResolveIndex(gc.CurrentScore);
+
+        if (zoneIndex == lastAnnouncedZoneIndex)
+        {
+            return;
+        }
+
+        lastAnnouncedZoneIndex = zoneIndex;
+        zoneAnnounceTimer = ZoneAnnounceDuration;
+        zoneAnnounceLabel.color = Amber;
+        zoneAnnounceLabel.SetText(SpaceZoneCatalog.Zones[zoneIndex].EntryMessage);
+    }
+
+    // Shows which depth zone the player currently occupies (bracketed) plus the real per-depth
+    // obstacle spawn counts for this run, straight from ObstacleSpawner.DepthSpawnCounts -- never
+    // reads or writes any fairness/spawn-selection state itself, purely a readout of it.
+    private void RefreshDepthGauge()
+    {
+        if (!depthGaugeLabel)
+        {
+            return;
+        }
+
+        if (!cachedPlayer)
+        {
+            cachedPlayer = FindObjectOfType<PlayerController>();
+            if (!cachedPlayer)
+            {
+                return;
+            }
+        }
+
+        float min = cachedPlayer.MinimumSafeDepth;
+        float max = cachedPlayer.MaximumSafeDepth;
+        float half = Mathf.Max(0.01f, (max - min) * 0.5f);
+        float mid = (min + max) * 0.5f;
+        float t = Mathf.Clamp((cachedPlayer.CurrentTrackDepth - mid) / half, -1f, 1f);
+
+        string back = t < -0.33f ? "[BACK]" : "BACK";
+        string center = Mathf.Abs(t) <= 0.33f ? "[MID]" : "MID";
+        string front = t > 0.33f ? "[FRONT]" : "FRONT";
+        // Spawn counts are playtest telemetry, so only development builds show them; release
+        // players keep the BACK/MID/FRONT readout alone.
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        string spawnSummary = ObstacleSpawner.GetDepthSpawnSummary();
+#else
+        string spawnSummary = string.Empty;
+#endif
+
+        string text = string.IsNullOrEmpty(spawnSummary)
+            ? $"DEPTH  {back} · {center} · {front}"
+            : $"DEPTH  {back} · {center} · {front}   SPAWNS {spawnSummary}";
+
+        if (text == lastDepthGaugeText)
+        {
+            return;
+        }
+
+        lastDepthGaugeText = text;
+        depthGaugeLabel.SetText(text);
     }
 
     private void HandleNearMiss(NearMissFeedback feedback)

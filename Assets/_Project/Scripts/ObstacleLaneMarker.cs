@@ -14,6 +14,7 @@ public class ObstacleLaneMarker : MonoBehaviour
     private ObstacleSpawner owner;
     private bool registered;
     private bool initialized;
+    private bool facetsBuilt;
     private float spawnHeight = 13.5f;
     private Vector3 baseVisualScale = Vector3.one;
 
@@ -51,11 +52,70 @@ public class ObstacleLaneMarker : MonoBehaviour
         if (visual)
         {
             baseVisualScale = visual.localScale;
+            BuildFacetsIfNeeded();
         }
 
         if (initialized)
         {
             Register();
+        }
+    }
+
+    // Adds a few small, collider-less "shard" cubes onto the obstacle's own visual so its
+    // silhouette reads as a jagged chunk of debris instead of a plain box -- purely cosmetic, never
+    // affects the obstacle's actual collider/hit-box, and reuses the obstacle's own existing
+    // material so a chip automatically matches whatever color that obstacle already renders in.
+    // Guarded by facetsBuilt (a per-instance field, not reset on disable) so an obstacle builds its
+    // chips only once even if it is disabled and re-enabled.
+    private void BuildFacetsIfNeeded()
+    {
+        if (facetsBuilt || !visual)
+        {
+            return;
+        }
+
+        facetsBuilt = true;
+
+        var visualRenderer = visual.GetComponent<Renderer>();
+        if (!visualRenderer)
+        {
+            return;
+        }
+
+        Material sharedMat = visualRenderer.sharedMaterial;
+
+        // Deterministic per-instance jitter (GetInstanceID, not gameplay RNG) so every obstacle
+        // looks slightly different without ever touching fairness-relevant state.
+        var rng = new System.Random(GetInstanceID());
+        const int chipCount = 3;
+        for (int i = 0; i < chipCount; i++)
+        {
+            float rx = (float)(rng.NextDouble() * 2.0 - 1.0);
+            float ry = (float)(rng.NextDouble() * 2.0 - 1.0);
+            float rz = (float)(rng.NextDouble() * 2.0 - 1.0);
+            float chipScale = 0.22f + (float)rng.NextDouble() * 0.16f;
+
+            GameObject chip = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            chip.name = $"Facet_{i}";
+            chip.transform.SetParent(visual, false);
+            chip.transform.localPosition = new Vector3(rx, ry, rz) * 0.4f;
+            chip.transform.localScale = Vector3.one * chipScale;
+            chip.transform.localRotation = Quaternion.Euler(
+                (float)rng.NextDouble() * 360f,
+                (float)rng.NextDouble() * 360f,
+                (float)rng.NextDouble() * 360f);
+
+            var chipCollider = chip.GetComponent<Collider>();
+            if (chipCollider)
+            {
+                Destroy(chipCollider);
+            }
+
+            var chipRenderer = chip.GetComponent<Renderer>();
+            if (chipRenderer && sharedMat)
+            {
+                chipRenderer.sharedMaterial = sharedMat;
+            }
         }
     }
 

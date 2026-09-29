@@ -88,6 +88,8 @@ public class PlayerController : MonoBehaviour
         }
 
         EnsureNearMissDetector();
+        EnsureThruster();
+        EnsureShipDetailing();
 
         var position = transform.position;
         position.x = lanePositions[currentLane];
@@ -206,6 +208,30 @@ public class PlayerController : MonoBehaviour
         trigger.size = new Vector3(nearMissWidth, 1f, nearMissDepth);
 
         detectorObject.AddComponent<NearMissDetector>();
+    }
+
+    // Purely cosmetic exhaust glow -- see ShipThruster for details. Lives on the same "Visual"
+    // holder as ShipVisualTint, never on the root transform any collider/fairness math reads.
+    private void EnsureThruster()
+    {
+        if (!visual || visual.GetComponent<ShipThruster>())
+        {
+            return;
+        }
+
+        visual.gameObject.AddComponent<ShipThruster>();
+    }
+
+    // Purely cosmetic hull add-ons (beacons/cockpit glow/engine strips) -- see ShipDetailing for
+    // details. Same "Visual" holder as ShipThruster/ShipVisualTint, same never-touches-fairness rule.
+    private void EnsureShipDetailing()
+    {
+        if (!visual || visual.GetComponent<ShipDetailing>())
+        {
+            return;
+        }
+
+        visual.gameObject.AddComponent<ShipDetailing>();
     }
 
     private void EnsureLaneConfiguration()

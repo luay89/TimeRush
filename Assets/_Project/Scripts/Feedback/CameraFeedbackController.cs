@@ -8,6 +8,11 @@ public sealed class CameraFeedbackController : MonoBehaviour
 {
     [SerializeField] private FeedbackConfig feedbackConfig;
 
+    [Header("Ambient Asteroid Flyby")]
+    [Tooltip("Max shake strength for the ambient 'something big just swept past' cue -- purely cosmetic flavor, never derived from real collision or near-miss geometry.")]
+    [SerializeField, Range(0f, 0.3f)] private float ambientJoltMaxStrength = 0.12f;
+    [SerializeField, Range(0.1f, 0.6f)] private float ambientJoltDuration = 0.28f;
+
     private CameraFollow cameraFollow;
     private float shakeTimeRemaining;
     private float shakeDuration;
@@ -60,6 +65,7 @@ public sealed class CameraFeedbackController : MonoBehaviour
         events.NearMissTriggered += HandleNearMiss;
         events.ObstacleCollision += HandleCollision;
         events.RunPaused += ClearShake;
+        events.AmbientCameraJolt += HandleAmbientJolt;
     }
 
     private void Unsubscribe()
@@ -73,6 +79,7 @@ public sealed class CameraFeedbackController : MonoBehaviour
         events.NearMissTriggered -= HandleNearMiss;
         events.ObstacleCollision -= HandleCollision;
         events.RunPaused -= ClearShake;
+        events.AmbientCameraJolt -= HandleAmbientJolt;
     }
 
     private void HandleNearMiss(NearMissFeedback payload)
@@ -85,6 +92,14 @@ public sealed class CameraFeedbackController : MonoBehaviour
     private void HandleCollision(ObstacleCollisionFeedback payload)
     {
         BeginShake(feedbackConfig ? feedbackConfig.collisionShakeStrength : 0f, feedbackConfig ? feedbackConfig.collisionShakeDuration : 0f);
+    }
+
+    // Ambient flavor cue only -- deliberately does not go through FlowFeedbackScaling/near-miss
+    // math, since it carries no gameplay meaning (score, precision, danger). Still fully gated by
+    // the Camera Shake accessibility preference via BeginShake below.
+    private void HandleAmbientJolt(float strength)
+    {
+        BeginShake(Mathf.Clamp01(strength) * ambientJoltMaxStrength, ambientJoltDuration);
     }
 
     private void BeginShake(float strength, float duration)

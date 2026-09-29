@@ -20,14 +20,17 @@ public static class ResultsPresentation
         }
     }
 
-    public static DisplayData Build(int finalScore, int bestScore, bool setNewBest, RunLossReason lossReason)
+    public static DisplayData Build(int finalScore, int bestScore, bool setNewBest, RunLossReason lossReason, int dailyBestScore = 0)
     {
         int clampedFinalScore = Math.Max(0, finalScore);
         int displayedBestScore = Math.Max(Math.Max(0, bestScore), clampedFinalScore);
+        // "Best Today" always at least matches the run just finished, same as the all-time best,
+        // so it never briefly shows a stale (too-low) number after a personal-best run.
+        int displayedDailyBest = Math.Max(Math.Max(0, dailyBestScore), clampedFinalScore);
         string reason = lossReason == RunLossReason.ObstacleCollision ? "IMPACT DETECTED" : "RUN ENDED";
         string status = setNewBest ? $"NEW BEST  //  {reason}" : reason;
 
-        return new DisplayData($"Score: {clampedFinalScore}", $"Best: {displayedBestScore}", status);
+        return new DisplayData($"Score: {clampedFinalScore}", $"Best: {displayedBestScore}   //   Today: {displayedDailyBest}", status);
     }
 
     /// <summary>
@@ -108,6 +111,32 @@ public static class ResultsPresentation
         }
 
         return $"NEXT RUN   //   BEAT BEST {safeBest + 1}";
+    }
+
+    /// <summary>
+    /// Formats the compact three-line daily-missions readout from DailyMissions.GetStatuses().
+    /// Pure formatting only -- all progress/reward state lives in DailyMissions.
+    /// </summary>
+    public static string BuildDailyMissionsSummary(DailyMissions.MissionStatus[] statuses)
+    {
+        if (statuses == null || statuses.Length == 0)
+        {
+            return string.Empty;
+        }
+
+        var lines = new string[statuses.Length + 1];
+        lines[0] = "DAILY MISSIONS";
+
+        for (int i = 0; i < statuses.Length; i++)
+        {
+            DailyMissions.MissionStatus status = statuses[i];
+            // Plain ASCII only -- see ShipSkinCatalog's fix for why: LiberationSans SDF has no
+            // glyph for characters like a checkmark and would spam a per-frame console warning.
+            string mark = status.Completed ? "DONE" : $"{status.Progress}/{status.Target}";
+            lines[i + 1] = $"{mark}   {status.Title}   (+{status.RewardCoins})";
+        }
+
+        return string.Join("\n", lines);
     }
 
     /// <summary>
