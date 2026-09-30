@@ -93,3 +93,16 @@ Before accepting Scene/Prefab changes:
 CI-ready editor validation entry point:
 - Run Unity in batch mode with `FeedbackConfigReferenceValidator.ValidateOrThrow` when a Unity-capable environment is available.
 - Actual Unity Editor execution remains environment-dependent and is not replaced by `dotnet test` in this repository.
+
+## مشهد المعركة الفضائية (2026-09-30)
+
+الهدف: أن يشبه مشهد اللعب صورة مرجعية لمعركة فضائية (فضاء أسود، محطة قتالية عملاقة، مقاتلات، ليزر أخضر وأحمر، انفجارات) من دون أي تغيير في اللعب.
+
+- `SpaceBattleBackdrop` (جديد، يضيفه `RushTrackEnvironment` مرة واحدة لكل تحميل لـ Game): محطة قتالية كروية بنسيج إجرائي، سفينة حربية كبيرة، أزواج مقاتلات تتطارد وتطلق ليزر، ليزر عابر، وانفجارات. كل شيء بعيد خلف نهاية المسار (`MinCrossingDistance`) وبلا colliders ولا يقرأ حالة اللعب. تُدمج أجزاء كل نوع مقاتلة في mesh واحد لكل مادة لتقليل draw calls، وكل المواد والنسج والـ meshes تُحرَّر في `OnDestroy`.
+- Shaders جديدة في `Resources/Shaders`: `TimeRushSpaceSky` (سماء نجوم وسديم إجرائية)، `TimeRushSpaceProp` (إضاءة بسيطة بلا ضباب للأجسام البعيدة)، `TimeRushAdditiveGlow` (توهج الليزر والمحركات والانفجارات).
+- `RushTrackEnvironment`: يستخدم سماء الفضاء بدل Skybox/Procedural ويحوّل الكاميرا إلى Skybox، يخفي renderer الـ Ground فقط (يبقى الكائن والـ collider)، أزال الجدران الرمادية البعيدة، سطح المسار صار شفافاً جزئياً، وضباب linear من 38 إلى 72 (يبدأ بعد مسافة ظهور العوائق).
+- `ShipThruster`: توهج فوهتي محرك بلون السفينة الحالي.
+- `Main Camera Profile`: Bloom من intensity 4 / threshold 0.3 إلى 2.2 / 0.85 حتى لا يبيضّ المشهد كله.
+- أداة تطوير: `GameSceneScreenshotRunner` (قائمة TimeRush/Validation أو `-executeMethod GameSceneScreenshotRunner.RunBatch`) تشغّل Boot → MenuHub → Game وتحفظ لقطات PNG في `TIMERUSH_SHOT_DIR`.
+
+التحقق: EditMode 170/170، ولقطات Play Mode حقيقية. لم يُقَس الأداء على جهاز Android بعد.
