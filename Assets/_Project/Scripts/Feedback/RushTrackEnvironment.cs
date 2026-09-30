@@ -15,6 +15,11 @@ public sealed class RushTrackEnvironment : MonoBehaviour
     // How much brighter than its base color the glowing vein/crystal/beacon material's emission
     // is driven -- purely cosmetic (bloom-only), read by the zone-color drift in Update().
     private const float VeinEmissionIntensity = 1.6f;
+    private const string SpaceSkyShaderPath = "Shaders/TimeRushSpaceSky";
+    private const string SkyTintProperty = "_Tint";
+    // Zone sky tints are authored for the old atmospheric sky; space itself stays much darker.
+    private const float SpaceSkyTintScale = 0.45f;
+    private const string GroundObjectName = "Ground";
 
     [Header("Accessibility")]
     [SerializeField] private FeedbackConfig feedbackConfig;
@@ -86,7 +91,6 @@ public sealed class RushTrackEnvironment : MonoBehaviour
     private Material laneGlowMaterial;
     private Material structuralMaterial;
     private Material energyAccentMaterial;
-    private Material horizonMaterial;
     private Material asteroidBodyMaterial;
     private Material asteroidVeinMaterial;
     private Material debrisMaterial;
@@ -109,6 +113,7 @@ public sealed class RushTrackEnvironment : MonoBehaviour
     private float trackScrollY;
     // Same idea for the lane-guidance lines' flowing energy-pulse texture.
     private float laneFlowScrollY;
+    private bool usesSpaceSky;
     private bool built;
 
     // Distance/score-driven space palette so the passing asteroid field visibly changes
@@ -259,7 +264,6 @@ public sealed class RushTrackEnvironment : MonoBehaviour
         DestroyIfOwned(laneGlowMaterial);
         DestroyIfOwned(structuralMaterial);
         DestroyIfOwned(energyAccentMaterial);
-        DestroyIfOwned(horizonMaterial);
         DestroyIfOwned(asteroidBodyMaterial);
         DestroyIfOwned(asteroidVeinMaterial);
         DestroyIfOwned(debrisMaterial);
@@ -392,8 +396,15 @@ public sealed class RushTrackEnvironment : MonoBehaviour
         if (skyboxMaterial)
         {
             skyboxTintColor = Color.Lerp(skyboxTintColor, targetZone.SkyTint, zoneT);
-            skyboxMaterial.SetColor("_SkyTint", skyboxTintColor);
-            skyboxMaterial.SetColor("_GroundColor", skyboxTintColor * 0.35f);
+            if (usesSpaceSky)
+            {
+                skyboxMaterial.SetColor(SkyTintProperty, skyboxTintColor * SpaceSkyTintScale);
+            }
+            else
+            {
+                skyboxMaterial.SetColor("_SkyTint", skyboxTintColor);
+                skyboxMaterial.SetColor("_GroundColor", skyboxTintColor * 0.35f);
+            }
         }
 
         // Purely a flavor timer -- ticks whenever gameplay input is active, independent of the
@@ -503,6 +514,8 @@ public sealed class RushTrackEnvironment : MonoBehaviour
         BuildSpeedDust();
         BuildStarfield();
         BuildNebulaClouds();
+        ApplySpaceAtmosphere();
+        gameObject.AddComponent<SpaceBattleBackdrop>();
         ambientJoltTimer = Random.Range(ambientJoltMinInterval, ambientJoltMaxInterval);
         built = true;
     }
@@ -512,7 +525,9 @@ public sealed class RushTrackEnvironment : MonoBehaviour
         // Procedurally textured instead of flat Unlit/Color -- a faint glowing grid line pattern
         // gives the ground actual visual detail and, combined with the scroll in Update(), a real
         // sense of the surface streaming past under the ship.
-        trackSurfaceMaterial = CreateGridMaterial(new Color(0.045f, 0.058f, 0.09f), new Color(0.22f, 0.5f, 0.62f));
+        // Semi-transparent "glass" deck (alpha on the base, near-opaque grid lines) so the space
+        // battle shows through the track instead of the ship riding on a solid slab.
+        trackSurfaceMaterial = CreateGridMaterial(new Color(0.03f, 0.05f, 0.09f, 0.62f), new Color(0.22f, 0.5f, 0.62f, 0.9f));
         laneGlowMaterial = CreateUnlitMaterial(new Color(0.2f, 0.9f, 1f));
         // Dedicated flowing-energy texture for the 3 lane-guidance lines specifically -- separate
         // from laneGlowMaterial (still used by markers/rails/depth markers) so only the lines the
@@ -525,8 +540,6 @@ public sealed class RushTrackEnvironment : MonoBehaviour
         // hazard at a glance.
         energyAccentMaterial = CreateUnlitMaterial(new Color(0.32f, 0.2f, 0.52f));
         energyAccentBaseColor = energyAccentMaterial.color;
-        // Close to the scene's own fog color so far structures fade into the horizon instead of popping.
-        horizonMaterial = CreateUnlitMaterial(new Color(0.05f, 0.07f, 0.14f));
 
         // Dedicated asteroid-field materials, deliberately separate from the track-shell/lane
         // materials above -- so the space zone drift (void/belt/ice/nebula) only ever recolors
@@ -551,6 +564,19 @@ public sealed class RushTrackEnvironment : MonoBehaviour
         // dark-space procedural sky -- tiny/near-invisible sun, thin atmosphere, dark zone-tinted
         // sky/ground -- so the "atmosphere" itself finally has an authored look instead of the
         // engine default, and drifts per-zone in Update() alongside everything else.
+        Shader spaceSkyShader = Resources.Load<Shader>(SpaceSkyShaderPath);
+        if (spaceSkyShader)
+        {
+            // Deep-space backdrop (crisp stars + faint nebula) instead of an atmospheric sky --
+            // space has no horizon glow. The camera is switched to draw it in ApplySpaceAtmosphere.
+            skyboxMaterial = new Material(spaceSkyShader);
+            skyboxMaterial.SetColor(SkyTintProperty, startZone.SkyTint * SpaceSkyTintScale);
+            skyboxTintColor = startZone.SkyTint;
+            usesSpaceSky = true;
+            RenderSettings.skybox = skyboxMaterial;
+            return;
+        }
+
         Shader proceduralSkyShader = Shader.Find("Skybox/Procedural");
         if (proceduralSkyShader)
         {
@@ -686,11 +712,39 @@ public sealed class RushTrackEnvironment : MonoBehaviour
         CreateStaticCube("EnergyAccentLeft", visualRoot, new Vector3(-sideRailX - 0.2f, 0.1f, TrackCenterZ), new Vector3(0.05f, 0.08f, trackLength), energyAccentMaterial);
         CreateStaticCube("EnergyAccentRight", visualRoot, new Vector3(sideRailX + 0.2f, 0.1f, TrackCenterZ), new Vector3(0.05f, 0.08f, trackLength), energyAccentMaterial);
 
-        CreateStaticCube("OuterSilhouetteLeft", visualRoot, new Vector3(-outerPillarX, 1.7f, TrackCenterZ + 8f), new Vector3(0.7f, 3.4f, trackLength * 0.7f), structuralMaterial);
-        CreateStaticCube("OuterSilhouetteRight", visualRoot, new Vector3(outerPillarX, 1.7f, TrackCenterZ + 8f), new Vector3(0.7f, 3.4f, trackLength * 0.7f), structuralMaterial);
-
         BuildDepthMarkers();
-        BuildHorizonSilhouettes();
+    }
+
+    // The track now floats in open space: the scene's big lit Ground plane and the old grey
+    // horizon walls hid the battle backdrop behind a washed-out floor. Only the Ground's renderer
+    // is switched off -- its object/collider stay exactly as authored. Fog is pulled in so the far
+    // end of the track dissolves into the dark instead of ending on a hard edge; it still starts
+    // beyond the obstacle spawn distance so hazards stay fully readable. The backdrop shaders
+    // ignore fog, so the stars/station/fighters stay crisp.
+    private void ApplySpaceAtmosphere()
+    {
+        GameObject ground = GameObject.Find(GroundObjectName);
+        if (ground && ground.transform.parent == null)
+        {
+            var groundRenderer = ground.GetComponent<Renderer>();
+            if (groundRenderer)
+            {
+                groundRenderer.enabled = false;
+            }
+        }
+
+        if (RenderSettings.fog && RenderSettings.fogMode == FogMode.Linear)
+        {
+            RenderSettings.fogStartDistance = 38f;
+            RenderSettings.fogEndDistance = 72f;
+        }
+
+        Camera mainCamera = Camera.main;
+        if (mainCamera && usesSpaceSky)
+        {
+            mainCamera.clearFlags = CameraClearFlags.Skybox;
+            mainCamera.farClipPlane = Mathf.Max(mainCamera.farClipPlane, 1400f);
+        }
     }
 
     // Fixed, fully static floor lines at the player's own back-limit / center / forward-limit
@@ -707,21 +761,6 @@ public sealed class RushTrackEnvironment : MonoBehaviour
         CreateStaticCube("DepthMarkerBack", visualRoot, new Vector3(0f, 0.09f, backZ), new Vector3(markerWidth, 0.05f, 0.14f), energyAccentMaterial);
         CreateStaticCube("DepthMarkerCenter", visualRoot, new Vector3(0f, 0.09f, TrackCenterZ), new Vector3(markerWidth, 0.05f, 0.1f), laneGlowMaterial);
         CreateStaticCube("DepthMarkerForward", visualRoot, new Vector3(0f, 0.09f, forwardZ), new Vector3(markerWidth, 0.05f, 0.14f), energyAccentMaterial);
-    }
-
-    // Bounded, fully static distant layer (no Update cost) so the corridor reads as continuing
-    // past what the camera can currently see instead of ending abruptly behind the near pillars.
-    // Positioned further out in Z/X than OuterSilhouette and colored close to the scene fog color
-    // so linear fog naturally fades them -- reuses the existing fog system, no new VFX/shader.
-    private void BuildHorizonSilhouettes()
-    {
-        float farZ = TrackCenterZ + trackLength * 0.42f;
-        float farX = outerPillarX + 3.2f;
-
-        CreateStaticCube("HorizonSilhouetteLeft", visualRoot, new Vector3(-farX, 3.4f, farZ), new Vector3(1.1f, 7.2f, trackLength * 0.45f), horizonMaterial);
-        CreateStaticCube("HorizonSilhouetteRight", visualRoot, new Vector3(farX, 3.4f, farZ), new Vector3(1.1f, 7.2f, trackLength * 0.45f), horizonMaterial);
-        // Deliberately no beam spans the far horizon here: the forward view stays fully open
-        // instead of reading as a closing gate/tunnel ring.
     }
 
     private static GameObject CreateStaticCube(string name, Transform parent, Vector3 localPosition, Vector3 localScale, Material material)
@@ -914,8 +953,7 @@ public sealed class RushTrackEnvironment : MonoBehaviour
 
         // Every shape shares the same dedicated, lit, zone-driven asteroid body material so the
         // whole field both shifts color together as the run travels through deep space and shades
-        // consistently under SceneMoodController's directional light -- horizonMaterial stays
-        // reserved for the two flat, always-hazy HorizonSilhouette pillars in BuildHorizonSilhouettes.
+        // consistently under SceneMoodController's directional light.
         Material bodyMat = asteroidBodyMaterial;
         Material veinMat = asteroidVeinMaterial;
         Material metalMat = debrisMaterial;
@@ -983,7 +1021,7 @@ public sealed class RushTrackEnvironment : MonoBehaviour
                     "SolarPanel", asteroid,
                     new Vector3(0f, h * 0.5f + 0.42f, 0.34f),
                     new Vector3(1.05f, 0.06f, 0.5f),
-                    veinMat,
+                    metalMat,
                     Quaternion.Euler(18f, 0f, 0f));
                 break;
             }
@@ -991,11 +1029,13 @@ public sealed class RushTrackEnvironment : MonoBehaviour
             {
                 float radius = Mathf.Lerp(0.55f, 1f, t);
                 CreateStaticSphere("Body", asteroid, Vector3.zero, new Vector3(radius, radius, radius) * 2f, bodyMat);
+                // Dull metal debris ring (was the glowing vein material, which read as a bright
+                // white square against the new dark space backdrop).
                 CreateStaticCube(
                     "Ring", asteroid,
                     Vector3.zero,
-                    new Vector3(radius * 3.2f, 0.05f, radius * 3.2f),
-                    veinMat,
+                    new Vector3(radius * 2.6f, 0.04f, radius * 2.6f),
+                    metalMat,
                     Quaternion.Euler(78f, 0f, 18f));
                 break;
             }

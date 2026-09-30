@@ -16,11 +16,74 @@ public sealed class ShipThruster : MonoBehaviour
     [SerializeField, Range(10f, 90f)] private float emissionRate = 45f;
     [SerializeField] private Vector3 localEmitOffset = new Vector3(0f, 0.05f, -0.55f);
 
+    [Header("Engine Glow")]
+    [Tooltip("Hot engine-nozzle flares behind the hull (additive + bloom), like a fighter at full burn. Purely cosmetic.")]
+    [SerializeField] private Vector3[] engineNozzles = { new Vector3(-0.2f, 0.03f, -0.62f), new Vector3(0.2f, 0.03f, -0.62f) };
+    [SerializeField, Range(0.1f, 1.2f)] private float nozzleGlowSize = 0.34f;
+    [SerializeField, Range(1f, 8f)] private float nozzleGlowIntensity = 3.2f;
+
+    private const string GlowShaderPath = "Shaders/TimeRushAdditiveGlow";
+
     private Material ownedMaterial;
+    private Material nozzleMaterial;
+    private Color nozzleColor;
+    private Transform[] nozzleGlows = System.Array.Empty<Transform>();
 
     private void Awake()
     {
         BuildThruster();
+        BuildNozzleGlows();
+    }
+
+    private void Update()
+    {
+        if (!nozzleMaterial)
+        {
+            return;
+        }
+
+        // Fast, small flicker so the burn reads alive; never tied to gameplay state.
+        float flicker = 0.85f + 0.15f * Mathf.PerlinNoise(Time.time * 18f, 0.37f);
+        nozzleMaterial.SetColor("_Color", nozzleColor * flicker);
+        for (int i = 0; i < nozzleGlows.Length; i++)
+        {
+            nozzleGlows[i].localScale = Vector3.one * nozzleGlowSize * (0.92f + 0.16f * flicker);
+        }
+    }
+
+    private void BuildNozzleGlows()
+    {
+        Shader glowShader = Resources.Load<Shader>(GlowShaderPath);
+        if (!glowShader || engineNozzles == null)
+        {
+            return;
+        }
+
+        int index = ShipSkinCatalog.IndexOf(ShipSkinManager.SelectedSkinId);
+        Color hull = ShipSkinCatalog.Skins[index].HullColor;
+        // Saturated skin-colored burn with a little white heat, pushed into HDR so bloom haloes it.
+        nozzleColor = Color.Lerp(hull, Color.white, 0.2f) * nozzleGlowIntensity;
+        nozzleColor.a = 1f;
+
+        nozzleMaterial = new Material(glowShader);
+        nozzleMaterial.mainTexture = SoftParticleMaterial.SharedTexture;
+        nozzleMaterial.SetColor("_Color", nozzleColor);
+
+        nozzleGlows = new Transform[engineNozzles.Length];
+        for (int i = 0; i < engineNozzles.Length; i++)
+        {
+            GameObject glow = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            glow.name = "NozzleGlow" + i;
+            Destroy(glow.GetComponent<Collider>());
+            glow.transform.SetParent(transform, false);
+            glow.transform.localPosition = engineNozzles[i];
+            glow.transform.localScale = Vector3.one * nozzleGlowSize;
+            var glowRenderer = glow.GetComponent<Renderer>();
+            glowRenderer.sharedMaterial = nozzleMaterial;
+            glowRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            glowRenderer.receiveShadows = false;
+            nozzleGlows[i] = glow.transform;
+        }
     }
 
     // SoftParticleMaterial.Create() hands back a fresh Material instance (sharing the module's one
@@ -32,6 +95,11 @@ public sealed class ShipThruster : MonoBehaviour
         if (ownedMaterial)
         {
             Destroy(ownedMaterial);
+        }
+
+        if (nozzleMaterial)
+        {
+            Destroy(nozzleMaterial);
         }
     }
 
