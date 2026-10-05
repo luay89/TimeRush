@@ -25,24 +25,19 @@ public sealed class RushTrackEnvironment : MonoBehaviour
     [SerializeField] private FeedbackConfig feedbackConfig;
 
     [Header("Motion Bands")]
-    [SerializeField, Range(8, 40)] private int markerRows = 16;
-    [SerializeField] private float markerTopY = 14f;
-    [SerializeField] private float markerBottomY = -2.75f;
-    [SerializeField, Range(6, 28)] private int frameRows = 12;
-    [SerializeField] private float frameTopY = 18f;
-    [SerializeField] private float frameBottomY = -3.25f;
-    [SerializeField, Range(4, 24)] private int sidePanelRows = 10;
-    [SerializeField] private float sidePanelTopY = 17f;
-    [SerializeField] private float sidePanelBottomY = -3f;
-
-    [Header("Approach Scaling")]
-    [SerializeField, Range(0.5f, 1.4f)] private float farScaleMultiplier = 0.72f;
-    [SerializeField, Range(1f, 2.2f)] private float nearScaleMultiplier = 1.32f;
+    // Scenery streams toward the camera along -Z (the direction the ship flies), from deep in the
+    // fog to behind the camera, and grows in from nothing at the far end -- so nothing ever pops
+    // into or out of view. (It used to fall straight down in Y beside the track, which read as
+    // stacks of blocks sliding down a staircase.)
+    [SerializeField, Range(6, 28)] private int asteroidsPerSide = 12;
+    [SerializeField] private float sceneryNearZ = -16f;
+    [SerializeField] private float sceneryFarZ = 78f;
+    [SerializeField, Range(2f, 30f)] private float sceneryFadeLength = 14f;
 
     [Header("Near Speed Streaks")]
     [SerializeField, Range(4, 20)] private int streakRows = 8;
-    [SerializeField] private float streakTopY = 11f;
-    [SerializeField] private float streakBottomY = -2.2f;
+    [SerializeField] private float streakNearZ = -22f;
+    [SerializeField] private float streakFarZ = 36f;
 
     [Header("Ambient Pace Escalation")]
     [Tooltip("Brightness ceiling for the shared cyan/purple glow materials at max pace -- a slow continuous escalation, never an oscillation.")]
@@ -73,18 +68,10 @@ public sealed class RushTrackEnvironment : MonoBehaviour
     [SerializeField] private float outerPillarX = 9.8f;
 
     [Header("Fallback Column Geometry")]
-    [SerializeField] private float fallbackBoundaryX = 5f;
-    [SerializeField] private float fallbackLaneLineX = 1.25f;
-    [SerializeField] private float fallbackTrackZ = TrackCenterZ;
 
-    private readonly List<MarkerColumn> columns = new List<MarkerColumn>(4);
-    private MovingElement[] markers = System.Array.Empty<MovingElement>();
-    private MovingElement[] frames = System.Array.Empty<MovingElement>();
     private MovingElement[] sidePanels = System.Array.Empty<MovingElement>();
     private MovingElement[] speedStreaks = System.Array.Empty<MovingElement>();
     private Transform visualRoot;
-    private Transform markerRoot;
-    private Transform frameRoot;
     private Transform sidePanelRoot;
     private Transform streakRoot;
     private Material trackSurfaceMaterial;
@@ -168,34 +155,17 @@ public sealed class RushTrackEnvironment : MonoBehaviour
         return result;
     }
 
-    private readonly struct MarkerColumn
-    {
-        public readonly float X;
-        public readonly float Z;
-        public readonly Vector3 Scale;
-        public readonly Material Material;
-
-        public MarkerColumn(float x, float z, Vector3 scale, Material material)
-        {
-            X = x;
-            Z = z;
-            Scale = scale;
-            Material = material;
-        }
-    }
-
     private struct MovingElement
     {
         public Transform Transform;
         public Vector3 BaseScale;
         public float SpeedMultiplier;
-        public float MinY;
-        public float MaxY;
-        public bool UsesDepthScale;
+        // Travel range along local Z: elements move from MaxZ toward MinZ and wrap.
+        public float MinZ;
+        public float MaxZ;
         // Slow constant self-rotation, used only by the asteroid field so tumbling rocks/debris
         // reinforce "the ship is actually moving through space" rather than just drifting past
-        // flat and static. Left at the struct default (zero) for every other band, so markers and
-        // speed streaks are completely unaffected.
+        // flat and static. Left at the struct default (zero) for the speed streaks.
         public Vector3 RotationAxis;
         public float RotationSpeed;
     }
@@ -316,26 +286,15 @@ public sealed class RushTrackEnvironment : MonoBehaviour
 
     private void OnValidate()
     {
-        markerRows = Mathf.Clamp(markerRows, 8, 40);
-        frameRows = Mathf.Clamp(frameRows, 6, 28);
-        sidePanelRows = Mathf.Clamp(sidePanelRows, 4, 24);
-        if (markerTopY <= markerBottomY + 1f)
+        asteroidsPerSide = Mathf.Clamp(asteroidsPerSide, 6, 28);
+        if (sceneryFarZ <= sceneryNearZ + 10f)
         {
-            markerTopY = markerBottomY + 1f;
+            sceneryFarZ = sceneryNearZ + 10f;
         }
-        if (frameTopY <= frameBottomY + 1f)
-        {
-            frameTopY = frameBottomY + 1f;
-        }
-        if (sidePanelTopY <= sidePanelBottomY + 1f)
-        {
-            sidePanelTopY = sidePanelBottomY + 1f;
-        }
-        nearScaleMultiplier = Mathf.Max(nearScaleMultiplier, farScaleMultiplier);
         streakRows = Mathf.Clamp(streakRows, 4, 20);
-        if (streakTopY <= streakBottomY + 1f)
+        if (streakFarZ <= streakNearZ + 10f)
         {
-            streakTopY = streakBottomY + 1f;
+            streakFarZ = streakNearZ + 10f;
         }
         depthMarkerReachRange = Mathf.Max(0.5f, depthMarkerReachRange);
         trackHalfWidth = Mathf.Max(4f, trackHalfWidth);
@@ -421,7 +380,7 @@ public sealed class RushTrackEnvironment : MonoBehaviour
         if (speedDustSystem)
         {
             var dustVelocity = speedDustSystem.velocityOverLifetime;
-            dustVelocity.y = new ParticleSystem.MinMaxCurve(-Mathf.Max(4f, markerSpeed * 2.4f));
+            dustVelocity.z = new ParticleSystem.MinMaxCurve(-Mathf.Max(4f, markerSpeed * 2.4f));
         }
 
         // Scroll the procedural grid texture along the track direction so the ground reads as
@@ -446,8 +405,6 @@ public sealed class RushTrackEnvironment : MonoBehaviour
             return;
         }
 
-        AdvanceElements(markers, markerSpeed, Time.deltaTime);
-        AdvanceElements(frames, markerSpeed, Time.deltaTime);
         AdvanceElements(sidePanels, markerSpeed, Time.deltaTime);
         AdvanceElements(speedStreaks, markerSpeed, Time.deltaTime);
     }
@@ -464,15 +421,15 @@ public sealed class RushTrackEnvironment : MonoBehaviour
 
             Vector3 local = element.Transform.localPosition;
             float moveDistance = baseSpeed * element.SpeedMultiplier * deltaTime;
-            local.y = RushTrackPerceptionMath.WrapHeight(local.y - moveDistance, element.MinY, element.MaxY);
+            local.z = RushTrackPerceptionMath.WrapHeight(local.z - moveDistance, element.MinZ, element.MaxZ);
             element.Transform.localPosition = local;
 
-            if (element.UsesDepthScale)
-            {
-                float heightT = Mathf.InverseLerp(element.MinY, element.MaxY, local.y);
-                float scaleMultiplier = RushTrackPerceptionMath.ComputeApproachScale(heightT, nearScaleMultiplier, farScaleMultiplier);
-                element.Transform.localScale = element.BaseScale * scaleMultiplier;
-            }
+            // Grow in from nothing at the far end (and shrink away at the near end) so the wrap
+            // from near back to far is never visible as a pop.
+            float fade = Mathf.Min(
+                Mathf.Clamp01((element.MaxZ - local.z) / sceneryFadeLength),
+                Mathf.Clamp01((local.z - element.MinZ) / 3f));
+            element.Transform.localScale = element.BaseScale * fade;
 
             if (element.RotationSpeed != 0f)
             {
@@ -493,12 +450,6 @@ public sealed class RushTrackEnvironment : MonoBehaviour
         visualRoot = new GameObject("RushTrackVisuals").transform;
         visualRoot.SetParent(transform, false);
 
-        markerRoot = new GameObject("SpeedMarkers").transform;
-        markerRoot.SetParent(visualRoot, false);
-
-        frameRoot = new GameObject("TunnelFrames").transform;
-        frameRoot.SetParent(visualRoot, false);
-
         sidePanelRoot = new GameObject("SidePanels").transform;
         sidePanelRoot.SetParent(visualRoot, false);
 
@@ -507,8 +458,6 @@ public sealed class RushTrackEnvironment : MonoBehaviour
 
         BuildTrackShell();
 
-        ResolveColumns();
-        BuildMarkers();
         BuildAsteroidField();
         BuildSpeedStreaks();
         BuildSpeedDust();
@@ -774,7 +723,7 @@ public sealed class RushTrackEnvironment : MonoBehaviour
         var collider = cube.GetComponent<Collider>();
         if (collider)
         {
-            Destroy(collider);
+            DestroyImmediate(collider);
         }
 
         var renderer = cube.GetComponent<Renderer>();
@@ -808,7 +757,7 @@ public sealed class RushTrackEnvironment : MonoBehaviour
         var collider = sphere.GetComponent<Collider>();
         if (collider)
         {
-            Destroy(collider);
+            DestroyImmediate(collider);
         }
 
         var renderer = sphere.GetComponent<Renderer>();
@@ -820,95 +769,6 @@ public sealed class RushTrackEnvironment : MonoBehaviour
         return sphere;
     }
 
-    private void ResolveColumns()
-    {
-        columns.Clear();
-
-        TryAddColumn("LeftBoundary", true);
-        TryAddColumn("LaneLineLeft", false);
-        TryAddColumn("LaneLineRight", false);
-        TryAddColumn("RightBoundary", true);
-
-        if (columns.Count > 0)
-        {
-            return;
-        }
-
-        columns.Add(new MarkerColumn(-Mathf.Abs(fallbackBoundaryX), fallbackTrackZ, new Vector3(0.2f, 0.16f, 1.35f), null));
-        columns.Add(new MarkerColumn(-Mathf.Abs(fallbackLaneLineX), fallbackTrackZ, new Vector3(0.12f, 0.13f, 1.1f), null));
-        columns.Add(new MarkerColumn(Mathf.Abs(fallbackLaneLineX), fallbackTrackZ, new Vector3(0.12f, 0.13f, 1.1f), null));
-        columns.Add(new MarkerColumn(Mathf.Abs(fallbackBoundaryX), fallbackTrackZ, new Vector3(0.2f, 0.16f, 1.35f), null));
-    }
-
-    private void TryAddColumn(string childName, bool boundary)
-    {
-        Transform child = transform.Find(childName);
-        if (!child)
-        {
-            return;
-        }
-
-        var renderer = child.GetComponent<Renderer>();
-        Material material = renderer ? renderer.sharedMaterial : null;
-        Vector3 scale = boundary ? new Vector3(0.2f, 0.16f, 1.35f) : new Vector3(0.12f, 0.13f, 1.1f);
-        Vector3 local = child.localPosition;
-
-        columns.Add(new MarkerColumn(local.x, local.z, scale, material));
-    }
-
-    private void BuildMarkers()
-    {
-        int markerCount = markerRows * columns.Count;
-        markers = new MovingElement[markerCount];
-
-        int index = 0;
-        for (int row = 0; row < markerRows; row++)
-        {
-            float rowT = markerRows > 1 ? row / (float)(markerRows - 1) : 0f;
-            float y = Mathf.Lerp(markerBottomY, markerTopY, rowT);
-
-            for (int col = 0; col < columns.Count; col++)
-            {
-                MarkerColumn column = columns[col];
-                GameObject marker = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                marker.name = $"Marker_{row}_{col}";
-                marker.transform.SetParent(markerRoot, false);
-                marker.transform.localPosition = new Vector3(column.X, y, column.Z);
-                marker.transform.localScale = column.Scale;
-
-                var collider = marker.GetComponent<Collider>();
-                if (collider)
-                {
-                    Destroy(collider);
-                }
-
-                var renderer = marker.GetComponent<Renderer>();
-                if (renderer && column.Material)
-                {
-                    renderer.sharedMaterial = column.Material;
-                }
-                else if (renderer)
-                {
-                    renderer.sharedMaterial = laneGlowMaterial;
-                }
-
-                markers[index] = new MovingElement
-                {
-                    Transform = marker.transform,
-                    BaseScale = column.Scale,
-                    // FAR band: the boundary/lane-line wall markers span the whole track and read
-                    // as the most distant layer -- slowest of the four bands.
-                    SpeedMultiplier = 0.62f,
-                    MinY = markerBottomY,
-                    MaxY = markerTopY,
-                    UsesDepthScale = true
-                };
-
-                index++;
-            }
-        }
-    }
-
     // Varied flanking asteroid field: replaces the old closed tunnel-ring frames. Nothing here
     // spans the track (no left-to-right beam), so the forward path always reads as open. Shape,
     // size, material, rotation and depth all vary by index so the sides read as a real field of
@@ -916,21 +776,19 @@ public sealed class RushTrackEnvironment : MonoBehaviour
     // the "ship is genuinely traveling" cue the space theme is built around.
     private void BuildAsteroidField()
     {
-        int perSide = Mathf.Max(4, frameRows);
+        int perSide = Mathf.Max(4, asteroidsPerSide);
         sidePanels = new MovingElement[perSide * 2];
         int index = 0;
 
         for (int row = 0; row < perSide; row++)
         {
             float t = perSide > 1 ? row / (float)(perSide - 1) : 0f;
-            float y = Mathf.Lerp(sidePanelBottomY, sidePanelTopY, t);
-
-            index = BuildAsteroidCluster(index, row, -1f, y, t);
-            index = BuildAsteroidCluster(index, row, 1f, y, t);
+            index = BuildAsteroidCluster(index, row, -1f, t);
+            index = BuildAsteroidCluster(index, row, 1f, t);
         }
     }
 
-    private int BuildAsteroidCluster(int index, int row, float side, float y, float t)
+    private int BuildAsteroidCluster(int index, int row, float side, float t)
     {
         // Deterministic pseudo-variety (no gameplay RNG involved): shape/material/offset/tilt all
         // derive from the row index so the pattern is stable but never uniform. Six archetypes --
@@ -940,9 +798,12 @@ public sealed class RushTrackEnvironment : MonoBehaviour
         // drifted by score/zone in Update(), so the same shapes also change palette across a run.
         int shape = row % 6;
         float jitter = (row * 0.61803f) % 1f; // golden-ratio spacing avoids visible repeats
-        float depthSpan = Mathf.Lerp(3.5f, 13f, t);
+        // Spread evenly along the travel range (left and right sides offset by half a slot so
+        // the two flanks never line up), at varied heights around the deck.
+        float slot = (sceneryFarZ - sceneryNearZ) / Mathf.Max(4, asteroidsPerSide);
         float x = side * (outerPillarX + 1.4f + jitter * 2.6f);
-        float z = TrackCenterZ + Mathf.Lerp(4f, 11f, (t + jitter) % 1f) + depthSpan * 0.001f;
+        float y = Mathf.Lerp(-3.5f, 4.5f, (jitter * 3.7f) % 1f);
+        float z = sceneryNearZ + slot * (row + (side < 0f ? 0.25f : 0.75f));
 
         Transform asteroid = new GameObject($"Asteroid_{row}_{(side < 0f ? "L" : "R")}").transform;
         asteroid.SetParent(sidePanelRoot, false);
@@ -1047,9 +908,8 @@ public sealed class RushTrackEnvironment : MonoBehaviour
             BaseScale = Vector3.one,
             // NEAR-ish band: same read as the previous flanking scenery, just varied in shape now.
             SpeedMultiplier = 1.55f,
-            MinY = sidePanelBottomY,
-            MaxY = sidePanelTopY,
-            UsesDepthScale = false,
+            MinZ = sceneryNearZ,
+            MaxZ = sceneryFarZ,
             RotationAxis = rotationAxis,
             RotationSpeed = rotationSpeed
         };
@@ -1069,40 +929,38 @@ public sealed class RushTrackEnvironment : MonoBehaviour
         for (int row = 0; row < streakRows; row++)
         {
             float t = streakRows > 1 ? row / (float)(streakRows - 1) : 0f;
-            float y = Mathf.Lerp(streakBottomY, streakTopY, t);
+            float z = Mathf.Lerp(streakNearZ, streakFarZ, (t + (row % 2) * 0.07f) % 1f);
 
-            index = BuildSpeedStreak(index, row, -streakX, y);
-            index = BuildSpeedStreak(index, row, streakX, y);
+            index = BuildSpeedStreak(index, row, -streakX, z);
+            index = BuildSpeedStreak(index, row, streakX, z);
         }
     }
 
-    private int BuildSpeedStreak(int index, int row, float x, float y)
+    private int BuildSpeedStreak(int index, int row, float x, float z)
     {
-        GameObject streak = CreateStaticCube($"Streak_{row}_{(x < 0f ? "L" : "R")}", streakRoot, new Vector3(x, y, TrackCenterZ - 1.6f), new Vector3(0.06f, 0.06f, 1.6f), laneGlowMaterial);
+        GameObject streak = CreateStaticCube($"Streak_{row}_{(x < 0f ? "L" : "R")}", streakRoot, new Vector3(x, 0.08f, z), new Vector3(0.06f, 0.04f, 1.6f), laneGlowMaterial);
 
         speedStreaks[index] = new MovingElement
         {
             Transform = streak.transform,
             BaseScale = streak.transform.localScale,
             SpeedMultiplier = 1.85f,
-            MinY = streakBottomY,
-            MaxY = streakTopY,
-            UsesDepthScale = false
+            MinZ = streakNearZ,
+            MaxZ = streakFarZ
         };
 
         return index + 1;
     }
 
-    // Fine glowing dust filling the tunnel volume around the ship, streaking downward at the
-    // same "things sliding past overhead" direction as every other band (Update() decreases
-    // local Y). Purely an extra near-speed cue layered on top of the existing cube streaks --
+    // Fine glowing dust filling the volume above the deck, streaming toward the camera in the
+    // same direction as every other band (Update() drives local -Z). Purely an extra near-speed cue layered on top of the existing cube streaks --
     // no collider, never read by gameplay/fairness. Speed is refreshed every frame in Update()
     // from the same markerSpeed the cube bands use, so it always tracks current pace.
     private void BuildSpeedDust()
     {
         var dustObject = new GameObject("SpeedDust");
         dustObject.transform.SetParent(visualRoot, false);
-        dustObject.transform.localPosition = new Vector3(0f, (markerTopY + markerBottomY) * 0.5f, TrackCenterZ);
+        dustObject.transform.localPosition = new Vector3(0f, 2.5f, TrackCenterZ + 8f);
 
         speedDustSystem = dustObject.AddComponent<ParticleSystem>();
 
@@ -1122,15 +980,17 @@ public sealed class RushTrackEnvironment : MonoBehaviour
 
         var shape = speedDustSystem.shape;
         shape.shapeType = ParticleSystemShapeType.Box;
-        shape.scale = new Vector3(trackHalfWidth * 1.6f, markerTopY - markerBottomY, 1.5f);
+        shape.scale = new Vector3(trackHalfWidth * 1.6f, 5f, 36f);
         shape.randomDirectionAmount = 0f;
 
         // Explicit local-space velocity instead of relying on the shape's own emit direction --
-        // unambiguous, and Update() rewrites the Y term every frame to track current pace.
+        // unambiguous, and Update() rewrites the Z term every frame to track current pace.
         var velocityOverLifetime = speedDustSystem.velocityOverLifetime;
         velocityOverLifetime.enabled = true;
         velocityOverLifetime.space = ParticleSystemSimulationSpace.Local;
-        velocityOverLifetime.y = new ParticleSystem.MinMaxCurve(-12f);
+        velocityOverLifetime.x = new ParticleSystem.MinMaxCurve(0f);
+        velocityOverLifetime.y = new ParticleSystem.MinMaxCurve(0f);
+        velocityOverLifetime.z = new ParticleSystem.MinMaxCurve(-12f);
 
         var colorOverLifetime = speedDustSystem.colorOverLifetime;
         colorOverLifetime.enabled = true;

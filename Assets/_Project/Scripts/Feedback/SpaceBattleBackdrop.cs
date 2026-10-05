@@ -34,6 +34,10 @@ public sealed class SpaceBattleBackdrop : MonoBehaviour
 
     private const float FighterScale = 1.7f;
     private const float MinCrossingDistance = 72f;
+    // How far past the screen edge (as a multiple of the half-screen width) fighters and bolts
+    // start and end their passes, so a ship is never seen appearing from (or vanishing into) thin
+    // air at the side of the view. Leaves room for the path's sideways wobble.
+    private const float OffscreenMargin = 1.35f;
 
     private static readonly Color AllyHull = new Color(0.78f, 0.8f, 0.84f);
     private static readonly Color EnemyHull = new Color(0.36f, 0.38f, 0.43f);
@@ -67,6 +71,7 @@ public sealed class SpaceBattleBackdrop : MonoBehaviour
     private List<MergedPart> interceptorTemplate;
     private float cruiserFireTimer;
     private Vector3 sunDirection = new Vector3(-0.62f, 0.5f, -0.35f).normalized;
+    private Camera viewCamera;
 
     private sealed class Fighter
     {
@@ -205,6 +210,29 @@ public sealed class SpaceBattleBackdrop : MonoBehaviour
     {
         Quaternion look = Quaternion.Euler(ViewPitchDegrees - elevation, azimuth, 0f);
         return ViewOrigin + look * Vector3.forward * distance;
+    }
+
+    // World point at the given depth straight ahead of the camera anchor, offset sideways by
+    // lateralTan * depth and up by the elevation angle -- i.e. in a plane parallel to the screen.
+    // Paths between two such points cross the view without ever swinging toward the camera.
+    private static Vector3 PointAtDepth(float lateralTan, float elevation, float depth)
+    {
+        Quaternion pitch = Quaternion.Euler(ViewPitchDegrees, 0f, 0f);
+        return ViewOrigin + pitch * new Vector3(lateralTan * depth, Mathf.Tan(elevation * Mathf.Deg2Rad) * depth, depth);
+    }
+
+    // Sideways offset (as a tangent, see PointAtDepth) that is safely beyond the screen edge on
+    // the current device -- wide phones see much more to the sides than a 16:9 editor view.
+    private float OffscreenTan()
+    {
+        if (!viewCamera)
+        {
+            viewCamera = Camera.main;
+        }
+
+        float verticalFov = viewCamera ? viewCamera.fieldOfView : 64f;
+        float aspect = viewCamera ? viewCamera.aspect : 2.2f;
+        return Mathf.Tan(verticalFov * 0.5f * Mathf.Deg2Rad) * aspect * OffscreenMargin;
     }
 
     // ---------------------------------------------------------------- battle station
@@ -622,24 +650,28 @@ public sealed class SpaceBattleBackdrop : MonoBehaviour
 
     private void ResetPath(DogfightPath path, bool initial)
     {
+        float offscreen = OffscreenTan();
         bool flyby = Random.value < 0.3f;
         if (flyby)
         {
-            // Screams in from deep space and passes over/next to the camera.
+            // Emerges from deep space (tiny, so it grows in from a speck) and banks out past the
+            // edge of the screen -- it never ends its pass while still in view.
             float az = Random.Range(-18f, 18f);
-            path.Start = ViewPoint(az, Random.Range(-8f, 10f), Random.Range(260f, 340f));
-            path.End = ViewPoint((az < 0f ? -1f : 1f) * Random.Range(34f, 46f), Random.Range(14f, 30f), Random.Range(34f, 48f));
-            path.Duration = Random.Range(4.5f, 6.5f);
+            path.Start = ViewPoint(az, Random.Range(-8f, 10f), Random.Range(300f, 360f));
+            path.End = PointAtDepth((az < 0f ? -1f : 1f) * offscreen * Random.Range(1f, 1.2f), Random.Range(8f, 22f), Random.Range(70f, 100f));
+            path.Duration = Random.Range(5.5f, 7.5f);
         }
         else
         {
-            // Crosses the view from one side to the other, at a random depth.
+            // Crosses the view from one side to the other, at a random depth, starting and
+            // ending beyond the screen edges.
             float side = Random.value < 0.5f ? -1f : 1f;
             // Never closer than the far end of the track, so nothing crosses in front of the lanes.
             float distance = Random.Range(MinCrossingDistance, 170f);
-            path.Start = ViewPoint(side * Random.Range(50f, 62f), Random.Range(-30f, 22f), distance * Random.Range(1f, 1.2f));
-            path.End = ViewPoint(-side * Random.Range(50f, 62f), Random.Range(-30f, 22f), distance * Random.Range(1f, 1.2f));
-            path.Duration = Random.Range(4.5f, 8f) * Mathf.Lerp(0.8f, 1.3f, distance / 170f);
+            path.Start = PointAtDepth(side * offscreen * Random.Range(1f, 1.15f), Random.Range(-24f, 18f), distance * Random.Range(1f, 1.2f));
+            path.End = PointAtDepth(-side * offscreen * Random.Range(1f, 1.15f), Random.Range(-24f, 18f), distance * Random.Range(1f, 1.2f));
+            // Edge to edge is a longer trip than the old in-view arc, so give it more time.
+            path.Duration = Random.Range(7f, 11f) * Mathf.Lerp(0.8f, 1.3f, distance / 170f);
         }
 
         path.WobbleAxis = Random.onUnitSphere;
@@ -750,7 +782,7 @@ public sealed class SpaceBattleBackdrop : MonoBehaviour
         // Bolts from off-screen gunners slicing across the view, mostly green like the reference.
         float side = Random.value < 0.5f ? -1f : 1f;
         float distance = Random.Range(MinCrossingDistance, 220f);
-        Vector3 start = ViewPoint(side * Random.Range(40f, 55f), Random.Range(-32f, 26f), distance);
+        Vector3 start = PointAtDepth(side * OffscreenTan() * Random.Range(1f, 1.1f), Random.Range(-28f, 22f), distance);
         Vector3 end = ViewPoint(-side * Random.Range(10f, 55f), Random.Range(-32f, 26f), distance * Random.Range(1f, 1.3f));
         Color color = Random.value < 0.72f ? GreenBolt : RedBolt;
         FireBolt(start, (end - start).normalized, color, Random.Range(110f, 170f), Random.Range(6f, 10f) * distance / 120f);
@@ -934,7 +966,7 @@ public sealed class SpaceBattleBackdrop : MonoBehaviour
         var collider = go.GetComponent<Collider>();
         if (collider)
         {
-            Destroy(collider);
+            DestroyImmediate(collider);
         }
 
         var renderer = go.GetComponent<Renderer>();

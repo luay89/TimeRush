@@ -74,7 +74,10 @@ public sealed class ShipThruster : MonoBehaviour
         {
             GameObject glow = GameObject.CreatePrimitive(PrimitiveType.Quad);
             glow.name = "NozzleGlow" + i;
-            Destroy(glow.GetComponent<Collider>());
+            // Removed immediately (not at end of frame): a Quad's collider is a non-convex
+            // MeshCollider, and parenting it under the player's Rigidbody even for one frame logs
+            // "Non-convex MeshCollider with non-kinematic Rigidbody" and joins the physics shape.
+            DestroyImmediate(glow.GetComponent<Collider>());
             glow.transform.SetParent(transform, false);
             glow.transform.localPosition = engineNozzles[i];
             glow.transform.localScale = Vector3.one * nozzleGlowSize;
