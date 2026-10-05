@@ -245,7 +245,7 @@ public class ScoreUIBinder : MonoBehaviour
             {
                 float opacity = gc.GetControlHintOpacity();
                 statusLabel.color = new Color(Cyan.r, Cyan.g, Cyan.b, opacity);
-                statusLabel.SetText(opacity > 0.02f ? "A/D or Swipe: Lane  //  W/S or Swipe: Depth" : string.Empty);
+                statusLabel.SetText(opacity > 0.02f ? "A/D or Swipe: Lane  //  W/S or Swipe: Depth  //  Space or Tap: Fire" : string.Empty);
             }
         }
     }

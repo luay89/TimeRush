@@ -9,7 +9,12 @@ public sealed class PlayerInputSource : MonoBehaviour
     [SerializeField] private GameBalanceConfig gameBalanceConfig;
     [SerializeField] private bool allowTouchSwipe = true;
 
+    // A touch shorter than this that never became a swipe counts as a tap (fires the blaster).
+    private const float TapMaxSeconds = 0.25f;
+
     private Vector2 pointerDownPosition;
+    private float pointerDownTime;
+    private PlayerBlaster blaster;
     private bool trackingPointer;
     private bool swipeDispatchedForTouch;
     private PlayerIntentBuffer laneIntentBuffer;
@@ -24,6 +29,7 @@ public sealed class PlayerInputSource : MonoBehaviour
 
         laneInputBufferSeconds = gameBalanceConfig ? gameBalanceConfig.laneInputBufferSeconds : 0.12f;
         laneIntentBuffer = new PlayerIntentBuffer(laneInputBufferSeconds);
+        blaster = GetComponent<PlayerBlaster>();
     }
 
     /// <summary>
@@ -82,6 +88,12 @@ public sealed class PlayerInputSource : MonoBehaviour
             Input.GetKey(KeyCode.S) || Input.GetKey(KeyCode.DownArrow));
 
         Dispatch(keyboardIntent);
+
+        if (Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.F))
+        {
+            Fire();
+        }
+
         ReadTouchInput();
     }
 
@@ -97,6 +109,7 @@ public sealed class PlayerInputSource : MonoBehaviour
         if (touch.phase == TouchPhase.Began)
         {
             pointerDownPosition = touch.position;
+            pointerDownTime = Time.unscaledTime;
             trackingPointer = true;
             swipeDispatchedForTouch = false;
             return;
@@ -132,6 +145,11 @@ public sealed class PlayerInputSource : MonoBehaviour
         if (touch.phase == TouchPhase.Ended)
         {
             trackingPointer = false;
+
+            if (!swipeDispatchedForTouch && Time.unscaledTime - pointerDownTime <= TapMaxSeconds)
+            {
+                Fire();
+            }
         }
     }
 
@@ -151,6 +169,20 @@ public sealed class PlayerInputSource : MonoBehaviour
         if (intent.HasDepthAxis || intent.HasDepthStep)
         {
             playerController.SubmitIntent(new PlayerIntent(0, intent.DepthAxis, intent.DepthStep));
+        }
+    }
+
+    private void Fire()
+    {
+        if (!blaster)
+        {
+            // PlayerController adds the blaster in its own Awake, which may run after ours.
+            blaster = GetComponent<PlayerBlaster>();
+        }
+
+        if (blaster)
+        {
+            blaster.TryFire();
         }
     }
 

@@ -90,6 +90,7 @@ public class PlayerController : MonoBehaviour
         EnsureNearMissDetector();
         EnsureThruster();
         EnsureShipDetailing();
+        EnsureBlaster();
 
         var position = transform.position;
         position.x = lanePositions[currentLane];
@@ -232,6 +233,15 @@ public class PlayerController : MonoBehaviour
         }
 
         visual.gameObject.AddComponent<ShipDetailing>();
+    }
+
+    // Laser cannon fired by PlayerInputSource (Space / quick tap) -- see PlayerBlaster.
+    private void EnsureBlaster()
+    {
+        if (!GetComponent<PlayerBlaster>())
+        {
+            gameObject.AddComponent<PlayerBlaster>();
+        }
     }
 
     private void EnsureLaneConfiguration()

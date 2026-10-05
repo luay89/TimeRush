@@ -137,7 +137,7 @@ public sealed class PlayerPresencePresenter : MonoBehaviour
         var collider = fin.GetComponent<Collider>();
         if (collider)
         {
-            Destroy(collider);
+            DestroyImmediate(collider);
         }
 
         var renderer = fin.GetComponent<Renderer>();
