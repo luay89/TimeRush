@@ -617,7 +617,7 @@ MonoBehaviour:
   - 0
   - 2.5
   laneMoveSpeed: 18
-  laneChangeDuration: 0.12
+  laneChangeDuration: 0.15
   startingLane: 1
   forwardBackSpeed: 7.5
   depthChangeDuration: 0.14

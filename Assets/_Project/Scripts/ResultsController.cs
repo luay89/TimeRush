@@ -493,6 +493,8 @@ public class ResultsController : MonoBehaviour
         restartButton = CreateButton(buttonsRoot, RestartButtonName, "Restart");
         menuButton = CreateButton(buttonsRoot, MenuButtonName, "Menu");
         changeSkinButton = CreateButton(buttonsRoot, ChangeSkinButtonName, "Ship Color");
+        // Without this the auto-built buttons kept Unity's plain white Image colour.
+        ConfigureButtonLayout();
 
         return canvas;
     }

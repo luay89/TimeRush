@@ -160,7 +160,7 @@ public sealed class PlayerInputSource : MonoBehaviour
             return;
         }
 
-        if (intent.HasLaneStep && !playerController.SubmitIntent(new PlayerIntent(intent.LaneStep, 0f)) && playerController.IsLaneTransitioning)
+        if (intent.HasLaneStep && !playerController.SubmitIntent(new PlayerIntent(intent.LaneStep, 0f)) && !playerController.CanAcceptLaneChange)
         {
             // Keep one buffered lane intent so a fast player input during a lane transition is not lost, while preventing command queues.
             laneIntentBuffer.TryStoreLaneStep(intent.LaneStep, Time.unscaledTime);
@@ -188,7 +188,7 @@ public sealed class PlayerInputSource : MonoBehaviour
 
     private void ConsumeBufferedLaneIntent()
     {
-        if (playerController.IsLaneTransitioning || !laneIntentBuffer.TryConsumeLaneStep(Time.unscaledTime, out int laneStep))
+        if (!playerController.CanAcceptLaneChange || !laneIntentBuffer.TryConsumeLaneStep(Time.unscaledTime, out int laneStep))
         {
             return;
         }

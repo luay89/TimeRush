@@ -42,6 +42,12 @@ public class PlayerController : MonoBehaviour
     public float LaneChangeProgress { get; private set; }
     public bool IsLaneTransitioning => Mathf.Abs(lanePositions[currentLane] - transform.position.x) > 0.03f;
 
+    // SmoothDamp spends a long, nearly invisible tail on the last few centimetres of a lane change.
+    // Waiting for that tail before accepting the next lane input made quick left-right moves stall
+    // for ~0.4 s between lanes, so a new lane is accepted once the ship is most of the way there.
+    public bool CanAcceptLaneChange => Mathf.Abs(lanePositions[currentLane] - transform.position.x) < LaneChainDistance;
+    private const float LaneChainDistance = 0.6f;
+
     // Same GetDepthVariation() curve ObstacleSpawner already applies to its depth-spawn offsets
     // (0.65 at run start -> 1 by the time difficulty progress completes). Without this, the
     // player's reachable depth range stayed fixed at the full late-game width while obstacle
@@ -123,7 +129,7 @@ public class PlayerController : MonoBehaviour
 
     private bool TryChangeLane(int direction)
     {
-        if (IsLaneTransitioning)
+        if (!CanAcceptLaneChange)
         {
             return false;
         }

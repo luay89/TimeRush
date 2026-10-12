@@ -6,6 +6,10 @@ public class CameraFollow : MonoBehaviour
     [SerializeField] private Vector3 offset = new Vector3(0f, 8f, -10f);
     [SerializeField] private Vector3 lookAtOffset = new Vector3(0f, 2.5f, 3.5f);
     [SerializeField] private float followSpeed = 10f;
+    [Tooltip("How much of the ship's sideways movement the camera follows. Below 1 the ship visibly glides across the frame instead of the whole space scene swinging with every lane change.")]
+    [SerializeField, Range(0f, 1f)] private float lateralFollow = 0.4f;
+    [Tooltip("How quickly the camera's aim catches up with the ship. Aiming straight at the ship every frame made the view snap on each lane change.")]
+    [SerializeField] private float lookSmoothing = 7f;
 
     [Header("Speed Perception")]
     [SerializeField] private FeedbackConfig feedbackConfig;
@@ -28,6 +32,8 @@ public class CameraFollow : MonoBehaviour
     private PlayerController targetPlayerController;
     private float cachedNormalizedDepth;
     private float appliedDepthLagOffsetZ;
+    private Vector3 smoothedLookPoint;
+    private bool hasLookPoint;
 
     private void Awake()
     {
@@ -49,13 +55,26 @@ public class CameraFollow : MonoBehaviour
 
         UpdateDepthPerceptionState();
 
-        Vector3 desired = target.position + offset;
+        Vector3 followPoint = target.position;
+        followPoint.x *= lateralFollow;
+        Vector3 desired = followPoint + offset;
         Vector3 basePosition = transform.position - appliedFeedbackOffset - new Vector3(0f, 0f, appliedDepthLagOffsetZ);
         float depthLagOffsetZ = DepthPerceptionMath.ComputeDepthLagOffset(cachedNormalizedDepth, maxDepthCameraLag);
-        transform.position = Vector3.Lerp(basePosition, desired, followSpeed * Time.deltaTime) + feedbackOffset + new Vector3(0f, 0f, depthLagOffsetZ);
+        // Exponential smoothing so the follow feels the same at 30 or 120 fps.
+        float followBlend = 1f - Mathf.Exp(-followSpeed * Time.deltaTime);
+        transform.position = Vector3.Lerp(basePosition, desired, followBlend) + feedbackOffset + new Vector3(0f, 0f, depthLagOffsetZ);
         appliedFeedbackOffset = feedbackOffset;
         appliedDepthLagOffsetZ = depthLagOffsetZ;
-        transform.LookAt(target.position + lookAtOffset);
+
+        Vector3 lookTarget = followPoint + lookAtOffset;
+        if (!hasLookPoint)
+        {
+            smoothedLookPoint = lookTarget;
+            hasLookPoint = true;
+        }
+
+        smoothedLookPoint = Vector3.Lerp(smoothedLookPoint, lookTarget, 1f - Mathf.Exp(-lookSmoothing * Time.deltaTime));
+        transform.LookAt(smoothedLookPoint);
 
         UpdateSpeedFieldOfView();
     }
