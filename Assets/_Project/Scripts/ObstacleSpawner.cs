@@ -87,6 +87,8 @@ public class ObstacleSpawner : MonoBehaviour
     private PlayerController playerControllerReference;
     private bool configInvalid;
     private int beatsSinceHunter;
+    private Collider groundCollider;
+    private bool groundLookupDone;
 
     private readonly struct ResolvedPlacement
     {
@@ -453,11 +455,47 @@ public class ObstacleSpawner : MonoBehaviour
         float laneX = lanePositions[laneIndex];
         Vector3 spawnPos = new Vector3(laneX, spawnHeight, spawnZ);
         var instance = Instantiate(obstaclePrefab, spawnPos, Quaternion.identity);
+        IgnoreSceneryCollisions(instance);
         EnsureKillOnHit(instance);
         EnsureAutoDestroy(instance);
         AttachLaneMarker(instance, laneIndex, speed);
         ApplySpeed(instance, speed);
         CommitLaneSpawn(laneIndex, depthIndex, speed);
+    }
+
+    // Warships must fly straight down through the play area and out the bottom. The scene's
+    // (now invisible) Ground plane still has its collider, and obstacles are dynamic Rigidbodies,
+    // so they used to land on it and park right next to the player at ship height; neighbours
+    // could also bump each other. Ignore those contacts -- the player collision is untouched.
+    private void IgnoreSceneryCollisions(GameObject instance)
+    {
+        var obstacleCollider = instance.GetComponent<Collider>();
+        if (!obstacleCollider)
+        {
+            return;
+        }
+
+        if (!groundLookupDone)
+        {
+            groundLookupDone = true;
+            GameObject ground = GameObject.Find("Ground");
+            groundCollider = ground ? ground.GetComponent<Collider>() : null;
+        }
+
+        if (groundCollider)
+        {
+            Physics.IgnoreCollision(obstacleCollider, groundCollider);
+        }
+
+        var others = ObstacleLaneMarker.Active;
+        for (int i = 0; i < others.Count; i++)
+        {
+            var otherCollider = others[i] ? others[i].GetComponent<Collider>() : null;
+            if (otherCollider && otherCollider != obstacleCollider)
+            {
+                Physics.IgnoreCollision(obstacleCollider, otherCollider);
+            }
+        }
     }
 
     private bool TrySelectDepth(int laneIndex, out int depthIndex, out float spawnZ)
