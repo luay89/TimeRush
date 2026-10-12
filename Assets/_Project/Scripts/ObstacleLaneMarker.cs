@@ -99,7 +99,9 @@ public class ObstacleLaneMarker : MonoBehaviour
         visual.gameObject.SetActive(false);
 
         visual = WarshipObstacleVisual.Create(transform, hullMaterial);
-        visual.localScale = Vector3.one * 1.05f;
+        // Kept close to the 1x1x1 hit box (wingspan ~1.1 at its largest) so neighbouring lanes
+        // never visually merge into one pile of ships.
+        visual.localScale = Vector3.one * 0.8f;
         baseVisualRotation = visual.localRotation;
         // Instance id, not gameplay RNG: only desynchronizes the cosmetic roll between ships.
         bankPhase = (GetInstanceID() & 0xFF) * 0.0245f;

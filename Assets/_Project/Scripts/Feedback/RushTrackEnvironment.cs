@@ -20,6 +20,7 @@ public sealed class RushTrackEnvironment : MonoBehaviour
     // Zone sky tints are authored for the old atmospheric sky; space itself stays much darker.
     private const float SpaceSkyTintScale = 0.45f;
     private const string GroundObjectName = "Ground";
+    private static readonly string[] HiddenTrackChildren = { "LeftBoundary", "RightBoundary", "LaneLineLeft", "LaneLineRight" };
 
     [Header("Accessibility")]
     [SerializeField] private FeedbackConfig feedbackConfig;
@@ -34,25 +35,12 @@ public sealed class RushTrackEnvironment : MonoBehaviour
     [SerializeField] private float sceneryFarZ = 78f;
     [SerializeField, Range(2f, 30f)] private float sceneryFadeLength = 14f;
 
-    [Header("Near Speed Streaks")]
-    [SerializeField, Range(4, 20)] private int streakRows = 8;
-    [SerializeField] private float streakNearZ = -22f;
-    [SerializeField] private float streakFarZ = 36f;
-
-    [Header("Ambient Pace Escalation")]
-    [Tooltip("Brightness ceiling for the shared cyan/purple glow materials at max pace -- a slow continuous escalation, never an oscillation.")]
-    [SerializeField, Range(1f, 2.5f)] private float maxAmbientGlowBoost = 1.9f;
-
     [Header("Space Zone Transition")]
     [Tooltip("How quickly the asteroid field's rock/vein/debris colors drift toward the current distance zone (deep void/asteroid belt/ice field/nebula core). Purely cosmetic, driven only by GameController.CurrentScore.")]
     [SerializeField, Range(0.05f, 2f)] private float zoneTransitionSpeed = 0.35f;
 
-    [Header("Depth Markers")]
-    [Tooltip("Matches TrackLayoutConfig.SafeDepthRange -- the player's own late-game reachable depth range. Purely a fixed visual reference; never reads player/gameplay state.")]
-    [SerializeField] private float depthMarkerReachRange = 2f;
-
     [Header("Speed Dust")]
-    [Tooltip("Fine glowing dust streaking past the ship -- an extra nearest-band speed cue on top of the cube speed streaks. Purely cosmetic.")]
+    [Tooltip("Fine glowing dust streaking past the ship -- the nearest-band speed cue. Purely cosmetic.")]
     [SerializeField, Range(20f, 120f)] private float dustEmissionRate = 55f;
     [SerializeField, Range(0.4f, 1.6f)] private float dustLifetime = 0.85f;
 
@@ -70,36 +58,20 @@ public sealed class RushTrackEnvironment : MonoBehaviour
     [Header("Fallback Column Geometry")]
 
     private MovingElement[] sidePanels = System.Array.Empty<MovingElement>();
-    private MovingElement[] speedStreaks = System.Array.Empty<MovingElement>();
     private Transform visualRoot;
     private Transform sidePanelRoot;
-    private Transform streakRoot;
-    private Material trackSurfaceMaterial;
-    private Material laneGlowMaterial;
-    private Material structuralMaterial;
-    private Material energyAccentMaterial;
     private Material asteroidBodyMaterial;
     private Material asteroidVeinMaterial;
     private Material debrisMaterial;
     private Material skyboxMaterial;
-    private Material laneFlowMaterial;
-    private Color laneGlowBaseColor;
-    private Color energyAccentBaseColor;
     private Color asteroidBodyColor;
     private Color asteroidVeinColor;
     private Color debrisColor;
     private Color skyboxTintColor;
-    private float ambientGlowBrightness = 1f;
     private ParticleSystem speedDustSystem;
     private ParticleSystem starfieldSystem;
     private ParticleSystem nebulaSystem;
     private float ambientJoltTimer;
-    // Scrolling offset for the procedural track-grid texture, advanced every frame by the same
-    // markerSpeed every other band already uses -- so the ground itself visibly streams past
-    // instead of looking like a static painted floor.
-    private float trackScrollY;
-    // Same idea for the lane-guidance lines' flowing energy-pulse texture.
-    private float laneFlowScrollY;
     private bool usesSpaceSky;
     private bool built;
 
@@ -165,7 +137,7 @@ public sealed class RushTrackEnvironment : MonoBehaviour
         public float MaxZ;
         // Slow constant self-rotation, used only by the asteroid field so tumbling rocks/debris
         // reinforce "the ship is actually moving through space" rather than just drifting past
-        // flat and static. Left at the struct default (zero) for the speed streaks.
+        // flat and static.
         public Vector3 RotationAxis;
         public float RotationSpeed;
     }
@@ -229,11 +201,6 @@ public sealed class RushTrackEnvironment : MonoBehaviour
     // for that than a desktop Editor, so this matters far more here than it would look like it does.
     private void OnDestroy()
     {
-        DestroyMaterialAndTexture(trackSurfaceMaterial);
-        DestroyMaterialAndTexture(laneFlowMaterial);
-        DestroyIfOwned(laneGlowMaterial);
-        DestroyIfOwned(structuralMaterial);
-        DestroyIfOwned(energyAccentMaterial);
         DestroyIfOwned(asteroidBodyMaterial);
         DestroyIfOwned(asteroidVeinMaterial);
         DestroyIfOwned(debrisMaterial);
@@ -250,21 +217,6 @@ public sealed class RushTrackEnvironment : MonoBehaviour
         {
             Destroy(runtimeObject);
         }
-    }
-
-    private static void DestroyMaterialAndTexture(Material material)
-    {
-        if (!material)
-        {
-            return;
-        }
-
-        if (material.mainTexture)
-        {
-            Destroy(material.mainTexture);
-        }
-
-        Destroy(material);
     }
 
     // SoftParticleMaterial.Create() hands back a fresh Material instance per call but always the
@@ -291,12 +243,6 @@ public sealed class RushTrackEnvironment : MonoBehaviour
         {
             sceneryFarZ = sceneryNearZ + 10f;
         }
-        streakRows = Mathf.Clamp(streakRows, 4, 20);
-        if (streakFarZ <= streakNearZ + 10f)
-        {
-            streakFarZ = streakNearZ + 10f;
-        }
-        depthMarkerReachRange = Mathf.Max(0.5f, depthMarkerReachRange);
         trackHalfWidth = Mathf.Max(4f, trackHalfWidth);
         trackLength = Mathf.Max(40f, trackLength);
         sideRailX = Mathf.Max(trackHalfWidth + 0.4f, sideRailX);
@@ -320,18 +266,6 @@ public sealed class RushTrackEnvironment : MonoBehaviour
         float obstacleSpeed = gc ? gc.GetObstacleSpeed() : 4.1f;
         float rawPace = gc ? gc.GetPaceMultiplier() : 1f;
         bool cameraShakeEnabled = FeedbackPreferences.IsCameraShakeEnabled(feedbackConfig);
-
-        // Same accessibility-gated effective pace the FOV/marker-speed cues already use, reused
-        // here so the ambient glow escalation never bypasses the Camera Shake preference either.
-        float effectivePace = SpeedPerceptionMath.ResolveEffectivePace(rawPace, gameplayActive, cameraShakeEnabled);
-        float targetGlowBrightness = RushTrackPerceptionMath.ComputeAmbientGlowBrightness(effectivePace, maxAmbientGlowBoost);
-        ambientGlowBrightness = Mathf.Lerp(ambientGlowBrightness, targetGlowBrightness, 2.5f * Time.deltaTime);
-        laneGlowMaterial.color = laneGlowBaseColor * ambientGlowBrightness;
-        energyAccentMaterial.color = energyAccentBaseColor * ambientGlowBrightness;
-        if (laneFlowMaterial)
-        {
-            laneFlowMaterial.color = Color.white * Mathf.Clamp(ambientGlowBrightness, 0.6f, 2f);
-        }
 
         // Slowly drift the asteroid field's shared rock/vein/debris colors toward whatever space
         // zone the current score falls into -- deep void, asteroid belt, ice field, nebula core --
@@ -383,30 +317,12 @@ public sealed class RushTrackEnvironment : MonoBehaviour
             dustVelocity.z = new ParticleSystem.MinMaxCurve(-Mathf.Max(4f, markerSpeed * 2.4f));
         }
 
-        // Scroll the procedural grid texture along the track direction so the ground reads as
-        // actual moving terrain instead of a flat static color -- independent of the markerSpeed
-        // early-out below so the very first frames after a restart still show correct scroll.
-        if (trackSurfaceMaterial)
-        {
-            trackScrollY -= markerSpeed * Time.deltaTime * 0.12f;
-            trackSurfaceMaterial.mainTextureOffset = new Vector2(0f, trackScrollY);
-        }
-
-        // Same scroll trick, faster, on the lane-guidance lines -- reads as energy actively
-        // flowing down the corridor toward the ship rather than a static glowing stripe.
-        if (laneFlowMaterial)
-        {
-            laneFlowScrollY -= markerSpeed * Time.deltaTime * 0.4f;
-            laneFlowMaterial.mainTextureOffset = new Vector2(0f, laneFlowScrollY);
-        }
-
         if (markerSpeed <= 0.01f)
         {
             return;
         }
 
         AdvanceElements(sidePanels, markerSpeed, Time.deltaTime);
-        AdvanceElements(speedStreaks, markerSpeed, Time.deltaTime);
     }
 
     private void AdvanceElements(MovingElement[] elements, float baseSpeed, float deltaTime)
@@ -453,13 +369,7 @@ public sealed class RushTrackEnvironment : MonoBehaviour
         sidePanelRoot = new GameObject("SidePanels").transform;
         sidePanelRoot.SetParent(visualRoot, false);
 
-        streakRoot = new GameObject("SpeedStreaks").transform;
-        streakRoot.SetParent(visualRoot, false);
-
-        BuildTrackShell();
-
         BuildAsteroidField();
-        BuildSpeedStreaks();
         BuildSpeedDust();
         BuildStarfield();
         BuildNebulaClouds();
@@ -471,32 +381,8 @@ public sealed class RushTrackEnvironment : MonoBehaviour
 
     private void BuildMaterials()
     {
-        // Procedurally textured instead of flat Unlit/Color -- a faint glowing grid line pattern
-        // gives the ground actual visual detail and, combined with the scroll in Update(), a real
-        // sense of the surface streaming past under the ship.
-        // Semi-transparent "glass" deck (alpha on the base, near-opaque grid lines) so the space
-        // battle shows through the track instead of the ship riding on a solid slab.
-        trackSurfaceMaterial = CreateGridMaterial(new Color(0.03f, 0.05f, 0.09f, 0.62f), new Color(0.22f, 0.5f, 0.62f, 0.9f));
-        laneGlowMaterial = CreateUnlitMaterial(new Color(0.2f, 0.9f, 1f));
-        // Dedicated flowing-energy texture for the 3 lane-guidance lines specifically -- separate
-        // from laneGlowMaterial (still used by markers/rails/depth markers) so only the lines the
-        // player actually steers between get the "energy actively flowing toward you" cue.
-        laneFlowMaterial = CreateFlowMaterial(new Color(0.05f, 0.22f, 0.26f), new Color(0.55f, 1f, 1f));
-        laneGlowBaseColor = laneGlowMaterial.color;
-        structuralMaterial = CreateUnlitMaterial(new Color(0.12f, 0.16f, 0.24f));
-        // Dim purple, echoing the existing boundary identity (M_Boundary) -- the previous bright
-        // orange (1, 0.46, 0.16) sat too close to the obstacle color/emission and read as a second
-        // hazard at a glance.
-        energyAccentMaterial = CreateUnlitMaterial(new Color(0.32f, 0.2f, 0.52f));
-        energyAccentBaseColor = energyAccentMaterial.color;
-
-        // Dedicated asteroid-field materials, deliberately separate from the track-shell/lane
-        // materials above -- so the space zone drift (void/belt/ice/nebula) only ever recolors
-        // the passing rocks and debris, never the flight-corridor rails, lane guidance, or the
-        // pace-driven glow.
-        //
-        // Unlike the track-shell materials (which stay Unlit for flat, always-readable gameplay
-        // guidance), the asteroid body and debris use a lit shader so SceneMoodController's
+        // Asteroid-field materials, recolored by the space zone drift (void/belt/ice/nebula).
+        // The asteroid body and debris use a lit shader so SceneMoodController's
         // directional light actually shades their faces -- this is what makes a primitive
         // cube/sphere read as a solid rock with real volume instead of a flat-colored cutout. The
         // vein/crystal/beacon material stays bright regardless of light angle via emission, so it
@@ -541,84 +427,9 @@ public sealed class RushTrackEnvironment : MonoBehaviour
         }
     }
 
-    private Material CreateUnlitMaterial(Color color)
-    {
-        var material = new Material(Shader.Find("Unlit/Color"));
-        material.color = color;
-        return material;
-    }
-
-    // Builds a small, tileable, repeat-wrapped grid-line texture at runtime (same SetPixels/Apply
-    // approach as SoftParticleMaterial) and applies it via Sprites/Default -- unlike Unlit/Color,
-    // this shader actually supports a _MainTex, which is what lets the track surface show a
-    // pattern at all instead of one flat color. mainTextureScale tiles it across the real track
-    // dimensions so grid cells read as a consistent physical size regardless of track width/length.
-    private Material CreateGridMaterial(Color baseColor, Color lineColor)
-    {
-        const int size = 64;
-        const int lineThickness = 3;
-        var texture = new Texture2D(size, size, TextureFormat.RGBA32, false)
-        {
-            wrapMode = TextureWrapMode.Repeat,
-            filterMode = FilterMode.Bilinear,
-            name = "TrackGridTexture"
-        };
-
-        var pixels = new Color[size * size];
-        for (int y = 0; y < size; y++)
-        {
-            bool onHorizontalLine = y < lineThickness;
-            for (int x = 0; x < size; x++)
-            {
-                bool onVerticalLine = x < lineThickness;
-                pixels[y * size + x] = (onHorizontalLine || onVerticalLine) ? lineColor : baseColor;
-            }
-        }
-
-        texture.SetPixels(pixels);
-        texture.Apply(false, false);
-
-        var material = new Material(Shader.Find("Sprites/Default"));
-        material.mainTexture = texture;
-        material.color = Color.white;
-        material.mainTextureScale = new Vector2(Mathf.Max(1f, trackHalfWidth * 2f / 2.2f), Mathf.Max(1f, trackLength / 2.2f));
-        return material;
-    }
-
-    // A thin repeating "pulse" texture (bright dash, dark gap) for the lane-guidance lines --
-    // combined with the scrolling offset in Update(), it reads as energy segments continuously
-    // traveling down the corridor rather than one static glowing strip.
-    private Material CreateFlowMaterial(Color baseColor, Color pulseColor)
-    {
-        const int size = 32;
-        const int pulseBand = 7;
-        var texture = new Texture2D(1, size, TextureFormat.RGBA32, false)
-        {
-            wrapMode = TextureWrapMode.Repeat,
-            filterMode = FilterMode.Bilinear,
-            name = "LaneFlowTexture"
-        };
-
-        var pixels = new Color[size];
-        for (int y = 0; y < size; y++)
-        {
-            pixels[y] = y < pulseBand ? pulseColor : baseColor;
-        }
-
-        texture.SetPixels(pixels);
-        texture.Apply(false, false);
-
-        var material = new Material(Shader.Find("Sprites/Default"));
-        material.mainTexture = texture;
-        material.color = Color.white;
-        material.mainTextureScale = new Vector2(1f, Mathf.Max(1f, trackLength / 6f));
-        return material;
-    }
-
     // Lit (Standard shader) material -- picks up SceneMoodController's directional light so the
     // primitive rock/debris shapes actually shade across their faces instead of rendering as flat
-    // single-tone silhouettes. Kept separate from the track-shell's Unlit materials, which need to
-    // stay flat and equally bright at any light angle for gameplay legibility.
+    // single-tone silhouettes.
     private Material CreateLitMaterial(Color color, float metallic, float smoothness)
     {
         var material = new Material(Shader.Find("Standard"));
@@ -641,32 +452,9 @@ public sealed class RushTrackEnvironment : MonoBehaviour
         return material;
     }
 
-    private void BuildTrackShell()
-    {
-        CreateStaticCube("TrackSurface", visualRoot, new Vector3(0f, 0f, TrackCenterZ), new Vector3(trackHalfWidth * 2f, 0.08f, trackLength), trackSurfaceMaterial);
-        CreateStaticCube("TrackCenterSpine", visualRoot, new Vector3(0f, 0.045f, TrackCenterZ), new Vector3(0.2f, 0.05f, trackLength), structuralMaterial);
-
-        CreateStaticCube("LaneGuidanceLeft", visualRoot, new Vector3(-2.5f, 0.055f, TrackCenterZ), new Vector3(0.12f, 0.03f, trackLength), laneFlowMaterial);
-        CreateStaticCube("LaneGuidanceCenter", visualRoot, new Vector3(0f, 0.055f, TrackCenterZ), new Vector3(0.12f, 0.03f, trackLength), laneFlowMaterial);
-        CreateStaticCube("LaneGuidanceRight", visualRoot, new Vector3(2.5f, 0.055f, TrackCenterZ), new Vector3(0.12f, 0.03f, trackLength), laneFlowMaterial);
-
-        CreateStaticCube("LaneSeparatorLeft", visualRoot, new Vector3(-1.25f, 0.05f, TrackCenterZ), new Vector3(0.08f, 0.03f, trackLength), structuralMaterial);
-        CreateStaticCube("LaneSeparatorRight", visualRoot, new Vector3(1.25f, 0.05f, TrackCenterZ), new Vector3(0.08f, 0.03f, trackLength), structuralMaterial);
-
-        CreateStaticCube("SideRailLeft", visualRoot, new Vector3(-sideRailX, 0.35f, TrackCenterZ), new Vector3(0.26f, 0.7f, trackLength), structuralMaterial);
-        CreateStaticCube("SideRailRight", visualRoot, new Vector3(sideRailX, 0.35f, TrackCenterZ), new Vector3(0.26f, 0.7f, trackLength), structuralMaterial);
-        CreateStaticCube("SideRailAccentLeft", visualRoot, new Vector3(-sideRailX, 0.72f, TrackCenterZ), new Vector3(0.08f, 0.07f, trackLength), laneGlowMaterial);
-        CreateStaticCube("SideRailAccentRight", visualRoot, new Vector3(sideRailX, 0.72f, TrackCenterZ), new Vector3(0.08f, 0.07f, trackLength), laneGlowMaterial);
-
-        CreateStaticCube("EnergyAccentLeft", visualRoot, new Vector3(-sideRailX - 0.2f, 0.1f, TrackCenterZ), new Vector3(0.05f, 0.08f, trackLength), energyAccentMaterial);
-        CreateStaticCube("EnergyAccentRight", visualRoot, new Vector3(sideRailX + 0.2f, 0.1f, TrackCenterZ), new Vector3(0.05f, 0.08f, trackLength), energyAccentMaterial);
-
-        BuildDepthMarkers();
-    }
-
-    // The track now floats in open space: the scene's big lit Ground plane and the old grey
-    // horizon walls hid the battle backdrop behind a washed-out floor. Only the Ground's renderer
-    // is switched off -- its object/collider stay exactly as authored. Fog is pulled in so the far
+    // Open space, no road: the scene's lit Ground plane and the authored lane lines/boundary
+    // strips are hidden (renderers only -- every object and collider stays exactly as authored,
+    // so lanes, depth limits and fairness are unchanged). The ship flies free among the warships. Fog is pulled in so the far
     // end of the track dissolves into the dark instead of ending on a hard edge; it still starts
     // beyond the obstacle spawn distance so hazards stay fully readable. The backdrop shaders
     // ignore fog, so the stars/station/fighters stay crisp.
@@ -682,6 +470,16 @@ public sealed class RushTrackEnvironment : MonoBehaviour
             }
         }
 
+        for (int i = 0; i < HiddenTrackChildren.Length; i++)
+        {
+            Transform child = transform.Find(HiddenTrackChildren[i]);
+            var childRenderer = child ? child.GetComponent<Renderer>() : null;
+            if (childRenderer)
+            {
+                childRenderer.enabled = false;
+            }
+        }
+
         if (RenderSettings.fog && RenderSettings.fogMode == FogMode.Linear)
         {
             RenderSettings.fogStartDistance = 38f;
@@ -694,22 +492,6 @@ public sealed class RushTrackEnvironment : MonoBehaviour
             mainCamera.clearFlags = CameraClearFlags.Skybox;
             mainCamera.farClipPlane = Mathf.Max(mainCamera.farClipPlane, 1400f);
         }
-    }
-
-    // Fixed, fully static floor lines at the player's own back-limit / center / forward-limit
-    // depth positions -- a direct visual reference so forward/back movement reads as "I crossed
-    // this line" instead of being invisible against the scrolling environment. Zero Update cost;
-    // reuses the existing lane-glow/energy-accent materials (also driven by the ambient pace-glow
-    // escalation above, for free).
-    private void BuildDepthMarkers()
-    {
-        float backZ = TrackCenterZ - depthMarkerReachRange;
-        float forwardZ = TrackCenterZ + depthMarkerReachRange;
-        float markerWidth = trackHalfWidth * 1.7f;
-
-        CreateStaticCube("DepthMarkerBack", visualRoot, new Vector3(0f, 0.09f, backZ), new Vector3(markerWidth, 0.05f, 0.14f), energyAccentMaterial);
-        CreateStaticCube("DepthMarkerCenter", visualRoot, new Vector3(0f, 0.09f, TrackCenterZ), new Vector3(markerWidth, 0.05f, 0.1f), laneGlowMaterial);
-        CreateStaticCube("DepthMarkerForward", visualRoot, new Vector3(0f, 0.09f, forwardZ), new Vector3(markerWidth, 0.05f, 0.14f), energyAccentMaterial);
     }
 
     private static GameObject CreateStaticCube(string name, Transform parent, Vector3 localPosition, Vector3 localScale, Material material)
@@ -917,43 +699,8 @@ public sealed class RushTrackEnvironment : MonoBehaviour
         return index + 1;
     }
 
-    // NEAREST band: thin, bright ground-level streaks just inside the track -- the classic
-    // "motion streak" speed cue, scrolling the fastest of all four bands. Bounded count
-    // (streakRows x 2), reuses the shared laneGlowMaterial (no new draw-call-heavy assets).
-    private void BuildSpeedStreaks()
-    {
-        speedStreaks = new MovingElement[streakRows * 2];
-        int index = 0;
-        float streakX = trackHalfWidth * 0.55f;
-
-        for (int row = 0; row < streakRows; row++)
-        {
-            float t = streakRows > 1 ? row / (float)(streakRows - 1) : 0f;
-            float z = Mathf.Lerp(streakNearZ, streakFarZ, (t + (row % 2) * 0.07f) % 1f);
-
-            index = BuildSpeedStreak(index, row, -streakX, z);
-            index = BuildSpeedStreak(index, row, streakX, z);
-        }
-    }
-
-    private int BuildSpeedStreak(int index, int row, float x, float z)
-    {
-        GameObject streak = CreateStaticCube($"Streak_{row}_{(x < 0f ? "L" : "R")}", streakRoot, new Vector3(x, 0.08f, z), new Vector3(0.06f, 0.04f, 1.6f), laneGlowMaterial);
-
-        speedStreaks[index] = new MovingElement
-        {
-            Transform = streak.transform,
-            BaseScale = streak.transform.localScale,
-            SpeedMultiplier = 1.85f,
-            MinZ = streakNearZ,
-            MaxZ = streakFarZ
-        };
-
-        return index + 1;
-    }
-
     // Fine glowing dust filling the volume above the deck, streaming toward the camera in the
-    // same direction as every other band (Update() drives local -Z). Purely an extra near-speed cue layered on top of the existing cube streaks --
+    // same direction as every other band (Update() drives local -Z). Purely a near-speed cue --
     // no collider, never read by gameplay/fairness. Speed is refreshed every frame in Update()
     // from the same markerSpeed the cube bands use, so it always tracks current pace.
     private void BuildSpeedDust()

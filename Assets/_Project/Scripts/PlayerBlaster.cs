@@ -26,6 +26,11 @@ public sealed class PlayerBlaster : MonoBehaviour
     private ParticleSystem burst;
     private Material beamMaterial;
     private Material burstMaterial;
+    private AudioSource audioSource;
+
+    // Generated once per process (no audio assets needed): a falling laser zap and a noisy boom.
+    private static AudioClip laserClip;
+    private static AudioClip explosionClip;
 
     public bool IsReady => cooldown <= 0f;
 
@@ -33,6 +38,16 @@ public sealed class PlayerBlaster : MonoBehaviour
     {
         BuildBeam();
         BuildBurst();
+
+        audioSource = gameObject.AddComponent<AudioSource>();
+        audioSource.playOnAwake = false;
+        audioSource.spatialBlend = 0f;
+        audioSource.dopplerLevel = 0f;
+        if (!laserClip)
+        {
+            laserClip = CreateLaserClip();
+            explosionClip = CreateExplosionClip();
+        }
     }
 
     private void OnDestroy()
@@ -84,6 +99,7 @@ public sealed class PlayerBlaster : MonoBehaviour
         ObstacleLaneMarker target = FindTarget();
         Vector3 end = target ? target.transform.position : muzzle + new Vector3(0f, maxRange * 0.6f, 6f);
         ShowBeam(muzzle, end);
+        PlaySound(laserClip, 0.45f);
 
         if (!target)
         {
@@ -91,6 +107,7 @@ public sealed class PlayerBlaster : MonoBehaviour
         }
 
         Explode(target.transform.position);
+        PlaySound(explosionClip, 0.8f);
         // Deactivate now so it can neither collide this frame nor stay in any registry, then free it.
         target.gameObject.SetActive(false);
         Destroy(target.gameObject);
@@ -101,6 +118,57 @@ public sealed class PlayerBlaster : MonoBehaviour
         }
 
         return true;
+    }
+
+    private void PlaySound(AudioClip clip, float volume)
+    {
+        if (audioSource && clip && FeedbackPreferences.IsAudioEnabled(null))
+        {
+            audioSource.PlayOneShot(clip, volume);
+        }
+    }
+
+    private static AudioClip CreateLaserClip()
+    {
+        const int rate = 44100;
+        int length = (int)(rate * 0.18f);
+        var data = new float[length];
+        float phase = 0f;
+        for (int i = 0; i < length; i++)
+        {
+            float t = i / (float)length;
+            float frequency = Mathf.Lerp(1900f, 260f, t);
+            phase += frequency / rate;
+            float square = (phase % 1f) < 0.5f ? 1f : -1f;
+            float sine = Mathf.Sin(phase * Mathf.PI * 2f);
+            data[i] = (sine * 0.7f + square * 0.3f) * Mathf.Exp(-t * 5f) * 0.6f;
+        }
+
+        var clip = AudioClip.Create("BlasterLaser", length, 1, rate, false);
+        clip.SetData(data, 0);
+        return clip;
+    }
+
+    private static AudioClip CreateExplosionClip()
+    {
+        const int rate = 44100;
+        int length = (int)(rate * 0.7f);
+        var data = new float[length];
+        var random = new System.Random(1337);
+        float low = 0f;
+        for (int i = 0; i < length; i++)
+        {
+            float t = i / (float)length;
+            float noise = (float)(random.NextDouble() * 2.0 - 1.0);
+            // One-pole low-pass that closes over time: a bright crack decaying into a rumble.
+            low += (noise - low) * Mathf.Lerp(0.5f, 0.04f, t);
+            float rumble = Mathf.Sin(i * 2f * Mathf.PI * 55f / rate) * 0.35f;
+            data[i] = (low + rumble * (1f - t)) * Mathf.Exp(-t * 4f) * 0.9f;
+        }
+
+        var clip = AudioClip.Create("BlasterExplosion", length, 1, rate, false);
+        clip.SetData(data, 0);
+        return clip;
     }
 
     // The lowest warship still above the ship in its lane: the one about to arrive first.
