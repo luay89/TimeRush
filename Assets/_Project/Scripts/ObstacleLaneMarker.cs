@@ -27,6 +27,13 @@ public class ObstacleLaneMarker : MonoBehaviour
     private Rigidbody body;
     private float spawnHeight = 13.5f;
     private Vector3 baseVisualScale = Vector3.one;
+    private Transform impactMarker;
+    private Material impactMaterial;
+
+    // Shared by every obstacle: the ring mesh/texture are built once per process.
+    private static Mesh impactMesh;
+    private static Texture2D impactTexture;
+    private static PlayerController cachedPlayer;
 
     // Read from the Rigidbody's physics position when there is one: obstacles use render
     // interpolation for smooth motion, which makes transform.position lag the physics state by up
@@ -116,6 +123,122 @@ public class ObstacleLaneMarker : MonoBehaviour
         }
 
         UpdateApproachVisual();
+        UpdateImpactMarker();
+    }
+
+    // The chase camera looks down at the falling warships, so on screen a ship one depth step in
+    // front of or behind the player can sit right on top of the player's ship and still miss --
+    // it read as enemies flying through the player with no effect. This ring is drawn on the
+    // player's own flight plane directly under the warship: it marks exactly where the ship will
+    // cross that plane, so "the ring is under me" means a hit and anything else is a clean miss.
+    // Purely visual; no collider, never read by gameplay or fairness.
+    private void UpdateImpactMarker()
+    {
+        if (!cachedPlayer)
+        {
+            cachedPlayer = FindObjectOfType<PlayerController>();
+        }
+
+        if (!cachedPlayer)
+        {
+            if (impactMarker)
+            {
+                impactMarker.gameObject.SetActive(false);
+            }
+
+            return;
+        }
+
+        if (!impactMarker)
+        {
+            BuildImpactMarker();
+        }
+
+        Vector3 playerPosition = cachedPlayer.transform.position;
+        Vector3 position = transform.position;
+        float above = position.y - playerPosition.y;
+        bool visible = above > -0.6f;
+        if (impactMarker.gameObject.activeSelf != visible)
+        {
+            impactMarker.gameObject.SetActive(visible);
+        }
+
+        if (!visible)
+        {
+            return;
+        }
+
+        impactMarker.position = new Vector3(position.x, playerPosition.y - 0.35f, position.z);
+        impactMarker.rotation = Quaternion.Euler(90f, 0f, 0f);
+
+        float range = Mathf.Max(0.1f, spawnHeight - playerPosition.y);
+        float closeness = Mathf.Clamp01(1f - above / range);
+        bool onPlayer = Mathf.Abs(position.x - playerPosition.x) < 1f && Mathf.Abs(position.z - playerPosition.z) < 0.9f;
+        float pulse = onPlayer ? 0.75f + Mathf.Sin(Time.time * 18f) * 0.25f : 1f;
+        float alpha = Mathf.Lerp(0.18f, 0.95f, closeness * closeness) * pulse;
+        impactMaterial.color = onPlayer ? new Color(1f, 0.15f, 0.1f, alpha) : new Color(1f, 0.55f, 0.15f, alpha * 0.8f);
+        impactMarker.localScale = Vector3.one * Mathf.Lerp(1.8f, 1.15f, closeness);
+    }
+
+    private void BuildImpactMarker()
+    {
+        // Not parented: the obstacle root has a non-uniform scale that would skew the ring.
+        // OnDisable hides it and OnDestroy removes it together with the obstacle.
+        var go = new GameObject("ImpactMarker");
+        go.AddComponent<MeshFilter>().sharedMesh = ResolveImpactMesh();
+        var renderer = go.AddComponent<MeshRenderer>();
+        impactMaterial = new Material(Shader.Find("Sprites/Default")) { mainTexture = ResolveImpactTexture() };
+        renderer.sharedMaterial = impactMaterial;
+        renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        renderer.receiveShadows = false;
+        impactMarker = go.transform;
+    }
+
+    private static Mesh ResolveImpactMesh()
+    {
+        if (impactMesh)
+        {
+            return impactMesh;
+        }
+
+        // Unit quad in the XY plane (rotated flat at runtime), built by hand so no collider exists.
+        impactMesh = new Mesh { name = "ImpactMarkerQuad" };
+        impactMesh.vertices = new[] { new Vector3(-0.5f, -0.5f, 0f), new Vector3(0.5f, -0.5f, 0f), new Vector3(-0.5f, 0.5f, 0f), new Vector3(0.5f, 0.5f, 0f) };
+        impactMesh.uv = new[] { new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0f, 1f), new Vector2(1f, 1f) };
+        // Both windings so the ring is visible whichever way the quad ends up facing.
+        impactMesh.triangles = new[] { 0, 2, 1, 2, 3, 1, 0, 1, 2, 2, 1, 3 };
+        impactMesh.RecalculateBounds();
+        return impactMesh;
+    }
+
+    private static Texture2D ResolveImpactTexture()
+    {
+        if (impactTexture)
+        {
+            return impactTexture;
+        }
+
+        const int size = 64;
+        impactTexture = new Texture2D(size, size, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, name = "ImpactMarkerRing" };
+        var pixels = new Color[size * size];
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float dx = (x + 0.5f) / size * 2f - 1f;
+                float dy = (y + 0.5f) / size * 2f - 1f;
+                float r = Mathf.Sqrt(dx * dx + dy * dy);
+                // Bright outer ring, faint filled disc, small centre dot.
+                float ring = Mathf.Clamp01(1f - Mathf.Abs(r - 0.82f) / 0.1f);
+                float fill = r < 0.82f ? 0.18f : 0f;
+                float dot = Mathf.Clamp01(1f - r / 0.12f);
+                pixels[y * size + x] = new Color(1f, 1f, 1f, Mathf.Clamp01(Mathf.Max(ring, Mathf.Max(fill, dot))));
+            }
+        }
+
+        impactTexture.SetPixels(pixels);
+        impactTexture.Apply(false, true);
+        return impactTexture;
     }
 
     private void UpdateApproachVisual()
@@ -139,6 +262,11 @@ public class ObstacleLaneMarker : MonoBehaviour
 
     private void OnDisable()
     {
+        if (impactMarker)
+        {
+            impactMarker.gameObject.SetActive(false);
+        }
+
         active.Remove(this);
         Unregister();
     }
@@ -156,6 +284,16 @@ public class ObstacleLaneMarker : MonoBehaviour
 
     private void OnDestroy()
     {
+        if (impactMarker)
+        {
+            Destroy(impactMarker.gameObject);
+        }
+
+        if (impactMaterial)
+        {
+            Destroy(impactMaterial);
+        }
+
         Unregister();
         owner = null;
         initialized = false;
