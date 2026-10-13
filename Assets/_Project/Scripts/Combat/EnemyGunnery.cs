@@ -208,7 +208,7 @@ public sealed class EnemyGunnery : MonoBehaviour
         targetRing.gameObject.SetActive(true);
         targetRing.position = new Vector3(shot.Target.x, shot.Target.y - 0.3f, shot.Target.z);
         aimLine.enabled = true;
-        PlayClip(chargeClip, 0.35f);
+        PlayClip(chargeClip, 0.25f);
         return true;
     }
 
@@ -341,7 +341,7 @@ public sealed class EnemyGunnery : MonoBehaviour
             shot.Time = 0f;
             aimLine.enabled = false;
             bolt.enabled = true;
-            PlayClip(fireClip, 0.55f);
+            PlayClip(fireClip, 0.35f);
         }
     }
 
@@ -441,38 +441,45 @@ public sealed class EnemyGunnery : MonoBehaviour
         }
     }
 
-    // Rising whine while the enemy charges.
+    // Lock-on warning: two short, soft, in-tune beeps (A5 then E6, a perfect fifth). The earlier
+    // continuously rising whine clashed with everything else and read as noise.
     private static AudioClip CreateChargeClip()
     {
         const int rate = 44100;
-        int length = (int)(rate * TelegraphSeconds);
-        var data = new float[length];
-        float phase = 0f;
-        for (int i = 0; i < length; i++)
+        float[] notes = { 880f, 1318.5f };
+        const float noteSeconds = 0.11f;
+        const float gapSeconds = 0.09f;
+        int noteLength = (int)(rate * noteSeconds);
+        int gapLength = (int)(rate * gapSeconds);
+        var data = new float[(noteLength + gapLength) * notes.Length];
+        for (int n = 0; n < notes.Length; n++)
         {
-            float t = i / (float)length;
-            phase += Mathf.Lerp(220f, 880f, t * t) / rate;
-            data[i] = Mathf.Sin(phase * Mathf.PI * 2f) * Mathf.Min(1f, t * 6f) * 0.35f;
+            int start = n * (noteLength + gapLength);
+            for (int i = 0; i < noteLength; i++)
+            {
+                float t = i / (float)noteLength;
+                float envelope = Mathf.Min(1f, t * 25f) * (1f - t) * (1f - t);
+                data[start + i] = Mathf.Sin(2f * Mathf.PI * notes[n] * i / rate) * envelope * 0.35f;
+            }
         }
 
-        var clip = AudioClip.Create("EnemyCharge", length, 1, rate, false);
+        var clip = AudioClip.Create("EnemyLockOn", data.Length, 1, rate, false);
         clip.SetData(data, 0);
         return clip;
     }
 
-    // Lower, harsher zap than the player's cannon so the two never sound alike.
+    // Short soft laser "pew": a sine sliding down an octave with a quick decay.
     private static AudioClip CreateFireClip()
     {
         const int rate = 44100;
-        int length = (int)(rate * 0.22f);
+        int length = (int)(rate * 0.18f);
         var data = new float[length];
         float phase = 0f;
         for (int i = 0; i < length; i++)
         {
             float t = i / (float)length;
-            phase += Mathf.Lerp(900f, 140f, t) / rate;
-            float saw = (phase % 1f) * 2f - 1f;
-            data[i] = saw * Mathf.Exp(-t * 6f) * 0.5f;
+            phase += Mathf.Lerp(1046.5f, 523.25f, t) / rate;
+            data[i] = Mathf.Sin(phase * Mathf.PI * 2f) * Mathf.Min(1f, t * 60f) * Mathf.Exp(-t * 7f) * 0.45f;
         }
 
         var clip = AudioClip.Create("EnemyFire", length, 1, rate, false);

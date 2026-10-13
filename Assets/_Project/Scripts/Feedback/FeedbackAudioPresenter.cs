@@ -168,9 +168,13 @@ public sealed class FeedbackAudioPresenter : MonoBehaviour
     /// Multiplier 1 (no chain yet) plays at natural pitch; each Flow level adds a small step so a
     /// maxed-out chain sounds noticeably brighter/faster without becoming a cartoonish chipmunk cue.
     /// </summary>
+    private static readonly int[] FlowSemitones = { 0, 2, 4, 5 };
+
     private static float FlowPitch(int flowMultiplier)
     {
-        int level = Mathf.Max(0, flowMultiplier - 1);
-        return Mathf.Clamp(1f + level * 0.08f, 1f, 1.35f);
+        // Musical steps (root, major 2nd, major 3rd, perfect 4th) instead of +8% per level, which
+        // landed between notes and made a near-miss chain sound out of tune.
+        int level = Mathf.Clamp(flowMultiplier - 1, 0, FlowSemitones.Length - 1);
+        return Mathf.Pow(2f, FlowSemitones[level] / 12f);
     }
 }
