@@ -24,6 +24,8 @@ public sealed class PlayerBlaster : MonoBehaviour
     private float beamTimer;
     private LineRenderer beam;
     private ParticleSystem burst;
+    private ParticleSystem debris;
+    private Material debrisMaterial;
     private Material beamMaterial;
     private Material burstMaterial;
     private AudioSource audioSource;
@@ -61,6 +63,11 @@ public sealed class PlayerBlaster : MonoBehaviour
         {
             Destroy(burstMaterial);
         }
+
+        if (debrisMaterial)
+        {
+            Destroy(debrisMaterial);
+        }
     }
 
     private void Update()
@@ -83,7 +90,7 @@ public sealed class PlayerBlaster : MonoBehaviour
     /// <summary>Fires if the cannon is ready during play. Returns true when a shot went out.</summary>
     public bool TryFire()
     {
-        if (cooldown > 0f || !GameStateMachine.IsGameplayInputAllowed)
+        if (cooldown > 0f || !GameStateMachine.IsGameplayInputAllowed || RunCountdown.IsCounting)
         {
             return false;
         }
@@ -106,8 +113,12 @@ public sealed class PlayerBlaster : MonoBehaviour
             return true;
         }
 
-        Explode(target.transform.position);
+        Vector3 hitPosition = target.transform.position;
+        Explode(hitPosition);
         PlaySound(explosionClip, 0.8f);
+        FloatingScorePopup.Spawn(hitPosition, "+" + scorePerKill, new Color(1f, 0.85f, 0.3f, 1f));
+        // A short kick on the camera sells the kill; goes through the Camera Shake preference.
+        GameFeedbackSignals.RaiseAmbientCameraJolt(0.7f);
         // Deactivate now so it can neither collide this frame nor stay in any registry, then free it.
         target.gameObject.SetActive(false);
         Destroy(target.gameObject);
@@ -246,11 +257,11 @@ public sealed class PlayerBlaster : MonoBehaviour
         main.loop = false;
         main.playOnAwake = false;
         main.simulationSpace = ParticleSystemSimulationSpace.World;
-        main.startLifetime = new ParticleSystem.MinMaxCurve(0.35f, 0.7f);
-        main.startSpeed = new ParticleSystem.MinMaxCurve(2f, 7f);
-        main.startSize = new ParticleSystem.MinMaxCurve(0.25f, 0.7f);
+        main.startLifetime = new ParticleSystem.MinMaxCurve(0.4f, 0.85f);
+        main.startSpeed = new ParticleSystem.MinMaxCurve(3f, 10f);
+        main.startSize = new ParticleSystem.MinMaxCurve(0.35f, 1.1f);
         main.startColor = new ParticleSystem.MinMaxGradient(new Color(1f, 0.85f, 0.4f), new Color(1f, 0.35f, 0.1f));
-        main.maxParticles = 120;
+        main.maxParticles = 240;
         main.gravityModifier = 0f;
 
         var emission = burst.emission;
@@ -274,6 +285,48 @@ public sealed class PlayerBlaster : MonoBehaviour
         particleRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         particleRenderer.receiveShadows = false;
         burst.Play();
+        BuildDebris();
+    }
+
+    // Dark hull fragments that tumble outward and fall away -- reads as the ship breaking apart
+    // rather than just a puff of fire.
+    private void BuildDebris()
+    {
+        var go = new GameObject("BlasterDebris");
+        go.transform.SetParent(transform, false);
+        debris = go.AddComponent<ParticleSystem>();
+        debris.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+
+        var main = debris.main;
+        main.loop = false;
+        main.playOnAwake = false;
+        main.simulationSpace = ParticleSystemSimulationSpace.World;
+        main.startLifetime = new ParticleSystem.MinMaxCurve(0.6f, 1.2f);
+        main.startSpeed = new ParticleSystem.MinMaxCurve(4f, 9f);
+        main.startSize = new ParticleSystem.MinMaxCurve(0.12f, 0.32f);
+        main.startRotation3D = false;
+        main.startRotation = new ParticleSystem.MinMaxCurve(0f, Mathf.PI * 2f);
+        main.startColor = new ParticleSystem.MinMaxGradient(new Color(0.25f, 0.22f, 0.22f), new Color(1f, 0.5f, 0.2f));
+        main.gravityModifier = 0.9f;
+        main.maxParticles = 120;
+
+        var emission = debris.emission;
+        emission.rateOverTime = 0f;
+
+        var shape = debris.shape;
+        shape.shapeType = ParticleSystemShapeType.Sphere;
+        shape.radius = 0.25f;
+
+        var rotation = debris.rotationOverLifetime;
+        rotation.enabled = true;
+        rotation.z = new ParticleSystem.MinMaxCurve(-8f, 8f);
+
+        var particleRenderer = go.GetComponent<ParticleSystemRenderer>();
+        debrisMaterial = new Material(Shader.Find("Sprites/Default"));
+        particleRenderer.sharedMaterial = debrisMaterial;
+        particleRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        particleRenderer.receiveShadows = false;
+        debris.Play();
     }
 
     private void Explode(Vector3 position)
@@ -284,6 +337,11 @@ public sealed class PlayerBlaster : MonoBehaviour
         }
 
         burst.transform.position = position;
-        burst.Emit(28);
+        burst.Emit(60);
+        if (debris)
+        {
+            debris.transform.position = position;
+            debris.Emit(18);
+        }
     }
 }

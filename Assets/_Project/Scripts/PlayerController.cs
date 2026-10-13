@@ -97,6 +97,10 @@ public class PlayerController : MonoBehaviour
         EnsureThruster();
         EnsureShipDetailing();
         EnsureBlaster();
+        if (!GetComponent<PlayerShieldBubble>())
+        {
+            gameObject.AddComponent<PlayerShieldBubble>();
+        }
 
         var position = transform.position;
         position.x = lanePositions[currentLane];

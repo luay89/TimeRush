@@ -43,6 +43,7 @@ public class GameController : MonoBehaviour
     public bool IsGameOver => _gameOver;
     public bool HasContinuedThisRun => hasContinuedThisRun;
     public bool IsPlayerInvulnerable => invulnerabilityTimer > 0f;
+    public float InvulnerabilityRemaining => invulnerabilityTimer;
 
     /// <summary>
     /// Extends player invulnerability by at least the given duration (never shortens an
