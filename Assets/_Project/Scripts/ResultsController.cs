@@ -437,7 +437,7 @@ public class ResultsController : MonoBehaviour
         glowRect.anchorMax = Vector2.one;
         glowRect.offsetMin = glowRect.offsetMax = Vector2.zero;
         var glowImage = glow.GetComponent<Image>();
-        glowImage.color = new Color(0.16f, 0.08f, 0.32f, 0.22f);
+        glowImage.color = new Color(0.16f, 0.08f, 0.32f, 0.1f);
         glowImage.raycastTarget = false;
 
         var random = new System.Random(7);

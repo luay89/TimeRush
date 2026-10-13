@@ -26,10 +26,10 @@ public sealed class SpaceBattleBackdrop : MonoBehaviour
     [SerializeField] private float stationElevation = 14f;
 
     [Header("Dogfight")]
-    [SerializeField, Range(1, 10)] private int dogfightPairs = 6;
-    [SerializeField, Range(0, 8)] private int loneFighters = 4;
+    [SerializeField, Range(1, 10)] private int dogfightPairs = 4;
+    [SerializeField, Range(0, 8)] private int loneFighters = 2;
     [SerializeField, Range(8, 64)] private int boltPoolSize = 40;
-    [SerializeField, Range(0f, 12f)] private float strayBoltsPerSecond = 6f;
+    [SerializeField, Range(0f, 12f)] private float strayBoltsPerSecond = 3.5f;
     [SerializeField, Range(0f, 1f)] private float explosionChancePerPass = 0.45f;
 
     private const float FighterScale = 1.7f;
