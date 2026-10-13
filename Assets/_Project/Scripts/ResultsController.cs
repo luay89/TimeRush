@@ -243,12 +243,218 @@ public class ResultsController : MonoBehaviour
 
         cachedCanvas = canvas;
         EnsureResultDetails(canvas.transform);
+        ArrangeResultsLayout(canvas.transform);
         DisableAllTextRaycasts(canvas.transform);
         EnsureEventSystem();
         CleanupDuplicateGameOverTitles(canvas.transform);
         CleanupExternalGameOverTitles();
 
         uiInitialized = true;
+    }
+
+    // =========================
+    // Layout + Backdrop
+    // =========================
+
+    private RectTransform resultsContentRoot;
+
+    private void LateUpdate()
+    {
+        FitContentToScreen();
+    }
+
+    // The score panel and button panel used fixed heights (260/360) while the panel kept gaining
+    // labels (rank, milestone, next-run hint, daily missions) and the button list grew to five, so
+    // text spilled out of the panel and the buttons were drawn straight over it. Here every block
+    // in the results column is sized by its real content, the status line joins the column instead
+    // of floating at a fixed offset, and the buttons go into a two-column grid.
+    private void ArrangeResultsLayout(Transform canvasTransform)
+    {
+        EnsureSpaceBackdrop(canvasTransform);
+
+        Transform scorePanel = finalScoreText ? finalScoreText.transform.parent : null;
+        resultsContentRoot = scorePanel ? scorePanel.parent as RectTransform : null;
+        if (!resultsContentRoot || !resultsContentRoot.GetComponent<VerticalLayoutGroup>())
+        {
+            return;
+        }
+
+        var column = resultsContentRoot.GetComponent<VerticalLayoutGroup>();
+        column.spacing = 22f;
+        column.padding = new RectOffset(0, 0, 24, 24);
+        column.childControlHeight = true;
+        column.childForceExpandHeight = false;
+
+        if (resultStatusText && resultStatusText.transform.parent != resultsContentRoot)
+        {
+            resultStatusText.transform.SetParent(resultsContentRoot, false);
+            int index = gameOverTitle && gameOverTitle.transform.parent == resultsContentRoot
+                ? gameOverTitle.transform.GetSiblingIndex() + 1
+                : 0;
+            resultStatusText.transform.SetSiblingIndex(index);
+        }
+
+        if (resultStatusText)
+        {
+            SetFixedHeight(resultStatusText.gameObject, 44f);
+        }
+
+        if (scorePanel.TryGetComponent<VerticalLayoutGroup>(out var panelLayout))
+        {
+            panelLayout.spacing = 8f;
+            panelLayout.padding = new RectOffset(24, 24, 26, 26);
+            panelLayout.childControlHeight = true;
+            panelLayout.childForceExpandHeight = false;
+
+            // Let each label report its own text height (an empty milestone line collapses to 0).
+            foreach (Transform child in scorePanel)
+            {
+                if (child.TryGetComponent<LayoutElement>(out var labelLayout) && child.GetComponent<TextMeshProUGUI>())
+                {
+                    labelLayout.minHeight = -1f;
+                    labelLayout.preferredHeight = -1f;
+                }
+            }
+
+            if (scorePanel.TryGetComponent<LayoutElement>(out var panelElement))
+            {
+                panelElement.minHeight = 200f;
+            }
+        }
+
+        Transform buttonPanel = restartButton ? restartButton.transform.parent : resultsContentRoot.Find("ButtonPanel");
+        if (buttonPanel && buttonPanel.parent == resultsContentRoot)
+        {
+            if (buttonPanel.TryGetComponent<VerticalLayoutGroup>(out var buttonList))
+            {
+                DestroyImmediate(buttonList);
+            }
+
+            var grid = buttonPanel.GetComponent<GridLayoutGroup>();
+            if (!grid)
+            {
+                grid = buttonPanel.gameObject.AddComponent<GridLayoutGroup>();
+            }
+
+            grid.cellSize = new Vector2(380f, 88f);
+            grid.spacing = new Vector2(24f, 20f);
+            grid.padding = new RectOffset(20, 20, 20, 20);
+            grid.startCorner = GridLayoutGroup.Corner.UpperLeft;
+            grid.startAxis = GridLayoutGroup.Axis.Horizontal;
+            grid.childAlignment = TextAnchor.UpperCenter;
+            grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+            grid.constraintCount = 2;
+
+            if (buttonPanel.TryGetComponent<LayoutElement>(out var buttonsElement))
+            {
+                buttonsElement.preferredWidth = 820f;
+                buttonsElement.minHeight = -1f;
+            }
+
+            if (buttonPanel.TryGetComponent<Image>(out var buttonsBackground))
+            {
+                buttonsBackground.color = new Color(0f, 0f, 0f, 0f);
+            }
+        }
+
+        LayoutRebuilder.ForceRebuildLayoutImmediate(resultsContentRoot);
+    }
+
+    private static void SetFixedHeight(GameObject target, float height)
+    {
+        var element = target.GetComponent<LayoutElement>();
+        if (!element)
+        {
+            element = target.AddComponent<LayoutElement>();
+        }
+
+        element.minHeight = height;
+        element.preferredHeight = height;
+    }
+
+    // Shrinks the whole column uniformly when it is taller than the screen (landscape or short
+    // phones), so nothing is ever cut off or overlapping; never scales it up.
+    private void FitContentToScreen()
+    {
+        if (!resultsContentRoot || !cachedCanvas)
+        {
+            return;
+        }
+
+        var canvasRect = cachedCanvas.transform as RectTransform;
+        float needed = resultsContentRoot.rect.height;
+        if (!canvasRect || needed <= 1f)
+        {
+            return;
+        }
+
+        float available = canvasRect.rect.height * 0.96f;
+        float scale = Mathf.Min(1f, available / needed);
+        if (Mathf.Abs(resultsContentRoot.localScale.x - scale) > 0.001f)
+        {
+            resultsContentRoot.localScale = new Vector3(scale, scale, 1f);
+        }
+
+        if (resultsContentRoot.anchoredPosition.sqrMagnitude > 0.01f)
+        {
+            resultsContentRoot.anchoredPosition = Vector2.zero;
+        }
+    }
+
+    // The Results scene still rendered Unity's default grey skybox behind the UI. Paint a deep-space
+    // backdrop (dark gradient-ish base plus a sprinkle of stars) behind everything on the canvas and
+    // clear the camera to the same colour, matching the space battle the run just ended in.
+    private void EnsureSpaceBackdrop(Transform canvasTransform)
+    {
+        Color space = new Color(0.008f, 0.012f, 0.035f, 1f);
+        Camera camera = Camera.main;
+        if (camera)
+        {
+            camera.clearFlags = CameraClearFlags.SolidColor;
+            camera.backgroundColor = space;
+        }
+
+        if (!canvasTransform || canvasTransform.Find("SpaceBackdrop"))
+        {
+            return;
+        }
+
+        var backdrop = new GameObject("SpaceBackdrop", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        backdrop.transform.SetParent(canvasTransform, false);
+        backdrop.transform.SetAsFirstSibling();
+        var rect = (RectTransform)backdrop.transform;
+        rect.anchorMin = Vector2.zero;
+        rect.anchorMax = Vector2.one;
+        rect.offsetMin = rect.offsetMax = Vector2.zero;
+        var image = backdrop.GetComponent<Image>();
+        image.color = space;
+        image.raycastTarget = false;
+
+        var glow = new GameObject("Nebula", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        glow.transform.SetParent(backdrop.transform, false);
+        var glowRect = (RectTransform)glow.transform;
+        glowRect.anchorMin = new Vector2(0f, 0.55f);
+        glowRect.anchorMax = Vector2.one;
+        glowRect.offsetMin = glowRect.offsetMax = Vector2.zero;
+        var glowImage = glow.GetComponent<Image>();
+        glowImage.color = new Color(0.16f, 0.08f, 0.32f, 0.1f);
+        glowImage.raycastTarget = false;
+
+        var random = new System.Random(7);
+        for (int i = 0; i < 90; i++)
+        {
+            var star = new GameObject("Star", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            star.transform.SetParent(backdrop.transform, false);
+            var starRect = (RectTransform)star.transform;
+            var anchor = new Vector2((float)random.NextDouble(), (float)random.NextDouble());
+            starRect.anchorMin = starRect.anchorMax = anchor;
+            float size = 2f + (float)random.NextDouble() * (i % 9 == 0 ? 5f : 2.5f);
+            starRect.sizeDelta = new Vector2(size, size);
+            var starImage = star.GetComponent<Image>();
+            float brightness = 0.35f + (float)random.NextDouble() * 0.65f;
+            starImage.color = new Color(0.8f, 0.9f, 1f, brightness);
+            starImage.raycastTarget = false;
+        }
     }
 
     private Canvas ResolveCanvasReference()
@@ -287,6 +493,8 @@ public class ResultsController : MonoBehaviour
         restartButton = CreateButton(buttonsRoot, RestartButtonName, "Restart");
         menuButton = CreateButton(buttonsRoot, MenuButtonName, "Menu");
         changeSkinButton = CreateButton(buttonsRoot, ChangeSkinButtonName, "Ship Color");
+        // Without this the auto-built buttons kept Unity's plain white Image colour.
+        ConfigureButtonLayout();
 
         return canvas;
     }
@@ -352,6 +560,9 @@ public class ResultsController : MonoBehaviour
 
         var restartBound = BindButton(restartButton, RestartGame, nameof(RestartGame));
         var menuBound = BindButton(menuButton, GoToMenu, nameof(GoToMenu));
+        // "Ship Color" had a handler (OnChangeSkinPressed) that was never hooked to the button,
+        // so pressing it did nothing. Optional: older Results layouts have no such button.
+        BindButton(changeSkinButton, OnChangeSkinPressed, nameof(OnChangeSkinPressed), false);
         BindContinueButton();
         BindCoinsContinueButton();
 
@@ -405,6 +616,7 @@ public class ResultsController : MonoBehaviour
 
         restartButton?.onClick.RemoveListener(RestartGame);
         menuButton?.onClick.RemoveListener(GoToMenu);
+        changeSkinButton?.onClick.RemoveListener(OnChangeSkinPressed);
 
         if (continueButton && continueButtonBound)
             continueButton.onClick.RemoveAllListeners();

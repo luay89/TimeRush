@@ -91,7 +91,7 @@ public sealed class ShipDetailing : MonoBehaviour
         var collider = go.GetComponent<Collider>();
         if (collider)
         {
-            Destroy(collider);
+            DestroyImmediate(collider);
         }
 
         var renderer = go.GetComponent<Renderer>();

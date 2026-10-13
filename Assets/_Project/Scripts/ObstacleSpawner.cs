@@ -47,6 +47,9 @@ public class ObstacleSpawner : MonoBehaviour
     private ObstaclePatternSet patternSet;
     [SerializeField, Tooltip("Enable recognizable multi-obstacle patterns. Fairness stays authoritative regardless of this flag.")]
     private bool enablePatternVariety = true;
+    [Header("Hunters")]
+    [SerializeField, Tooltip("Every Nth spawn beat, try to send a warship straight at the player's current lane and depth, so parking in one spot is never safe. Still goes through the same fairness checks as every other spawn. 0 disables.")]
+    private int hunterEveryBeats = 3;
 
     private float timer;
     private bool prefabMissingLogged;
@@ -83,6 +86,9 @@ public class ObstacleSpawner : MonoBehaviour
     private readonly List<FairnessObstacleState> fairnessScratch = new List<FairnessObstacleState>(16);
     private PlayerController playerControllerReference;
     private bool configInvalid;
+    private int beatsSinceHunter;
+    private Collider groundCollider;
+    private bool groundLookupDone;
 
     private readonly struct ResolvedPlacement
     {
@@ -191,6 +197,11 @@ public class ObstacleSpawner : MonoBehaviour
 
     private void SpawnForBeat(float speed, GameController gc)
     {
+        if (TrySpawnHunter(speed))
+        {
+            return;
+        }
+
         if (!enablePatternVariety || patternDirector == null)
         {
             TrySpawnObstacle(speed);
@@ -346,6 +357,72 @@ public class ObstacleSpawner : MonoBehaviour
         depthOffsets = trackLayoutConfig.CopyDepthOffsets();
     }
 
+    // Aims one warship at wherever the player is right now. Rejected (and retried on the next
+    // beat) whenever the lane/depth is already busy or FairnessValidator finds no reachable escape,
+    // so it can never create an unfair situation -- it only removes "stand still and win".
+    private bool TrySpawnHunter(float speed)
+    {
+        if (hunterEveryBeats <= 0 || !playerControllerReference)
+        {
+            return false;
+        }
+
+        beatsSinceHunter++;
+        if (beatsSinceHunter < hunterEveryBeats)
+        {
+            return false;
+        }
+
+        int lane = Mathf.Clamp(playerControllerReference.CurrentLane, 0, lanePositions.Length - 1);
+        if (IsLaneTooClose(lane) || IsLaneBlocked(lane) || ViolatesLockRule(lane, Time.time))
+        {
+            return false;
+        }
+
+        float spawnZ = Mathf.Clamp(
+            playerControllerReference.CurrentTrackDepth,
+            playerControllerReference.MinimumSafeDepth,
+            playerControllerReference.MaximumSafeDepth);
+
+        if (IsDepthOccupied(lane, spawnZ))
+        {
+            return false;
+        }
+
+        if (enableFairnessRules && !HasReachableSurvivalAction(lane, spawnZ, speed))
+        {
+            return false;
+        }
+
+        InstantiateObstacle(lane, spawnZ, NearestDepthIndex(spawnZ), speed);
+        beatsSinceHunter = 0;
+
+        if (debugLaneDecisions)
+        {
+            DebugLane($"hunter spawn lane {lane}, z {spawnZ:0.00}");
+        }
+
+        return true;
+    }
+
+    private int NearestDepthIndex(float spawnZ)
+    {
+        float variation = GameController.Instance ? GameController.Instance.GetDepthVariation() : 1f;
+        int best = 0;
+        float bestDistance = float.MaxValue;
+        for (int i = 0; i < depthOffsets.Length; i++)
+        {
+            float distance = Mathf.Abs(transform.position.z + depthOffsets[i] * variation - spawnZ);
+            if (distance < bestDistance)
+            {
+                bestDistance = distance;
+                best = i;
+            }
+        }
+
+        return best;
+    }
+
     private bool TrySpawnObstacle(float speed)
     {
         if (!TrySelectLane(speed, out int laneIndex))
@@ -378,11 +455,47 @@ public class ObstacleSpawner : MonoBehaviour
         float laneX = lanePositions[laneIndex];
         Vector3 spawnPos = new Vector3(laneX, spawnHeight, spawnZ);
         var instance = Instantiate(obstaclePrefab, spawnPos, Quaternion.identity);
+        IgnoreSceneryCollisions(instance);
         EnsureKillOnHit(instance);
         EnsureAutoDestroy(instance);
         AttachLaneMarker(instance, laneIndex, speed);
         ApplySpeed(instance, speed);
         CommitLaneSpawn(laneIndex, depthIndex, speed);
+    }
+
+    // Warships must fly straight down through the play area and out the bottom. The scene's
+    // (now invisible) Ground plane still has its collider, and obstacles are dynamic Rigidbodies,
+    // so they used to land on it and park right next to the player at ship height; neighbours
+    // could also bump each other. Ignore those contacts -- the player collision is untouched.
+    private void IgnoreSceneryCollisions(GameObject instance)
+    {
+        var obstacleCollider = instance.GetComponent<Collider>();
+        if (!obstacleCollider)
+        {
+            return;
+        }
+
+        if (!groundLookupDone)
+        {
+            groundLookupDone = true;
+            GameObject ground = GameObject.Find("Ground");
+            groundCollider = ground ? ground.GetComponent<Collider>() : null;
+        }
+
+        if (groundCollider)
+        {
+            Physics.IgnoreCollision(obstacleCollider, groundCollider);
+        }
+
+        var others = ObstacleLaneMarker.Active;
+        for (int i = 0; i < others.Count; i++)
+        {
+            var otherCollider = others[i] ? others[i].GetComponent<Collider>() : null;
+            if (otherCollider && otherCollider != obstacleCollider)
+            {
+                Physics.IgnoreCollision(obstacleCollider, otherCollider);
+            }
+        }
     }
 
     private bool TrySelectDepth(int laneIndex, out int depthIndex, out float spawnZ)

@@ -89,6 +89,8 @@ public sealed class PowerUpSpawner : MonoBehaviour
         ObstacleMover mover = pickupGO.AddComponent<ObstacleMover>();
         mover.SetSpeed(fallSpeed);
 
+        pickupGO.AddComponent<ShieldPickupVisual>();
+
         PowerUpPickup pickup = pickupGO.AddComponent<PowerUpPickup>();
         pickup.Configure(shieldDurationSeconds);
 
