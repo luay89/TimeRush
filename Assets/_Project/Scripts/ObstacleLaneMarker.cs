@@ -175,7 +175,7 @@ public class ObstacleLaneMarker : MonoBehaviour
         float closeness = Mathf.Clamp01(1f - above / range);
         bool onPlayer = Mathf.Abs(position.x - playerPosition.x) < 1f && Mathf.Abs(position.z - playerPosition.z) < 0.9f;
         float pulse = onPlayer ? 0.75f + Mathf.Sin(Time.time * 18f) * 0.25f : 1f;
-        float alpha = Mathf.Lerp(0.18f, 0.95f, closeness * closeness) * pulse;
+        float alpha = Mathf.Lerp(0.32f, 1f, closeness * closeness) * pulse;
         impactMaterial.color = onPlayer ? new Color(1f, 0.15f, 0.1f, alpha) : new Color(1f, 0.55f, 0.15f, alpha * 0.8f);
         impactMarker.localScale = Vector3.one * Mathf.Lerp(1.8f, 1.15f, closeness);
     }

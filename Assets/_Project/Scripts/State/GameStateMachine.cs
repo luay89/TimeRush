@@ -126,9 +126,17 @@ public sealed class GameStateMachine : MonoBehaviour
 
     public bool ReturnToMenu()
     {
-        if (sceneLoadInProgress || !EnsureStateModel().TryTransition(GameStateKind.MenuHub))
+        if (sceneLoadInProgress)
         {
             return false;
+        }
+
+        if (!EnsureStateModel().TryTransition(GameStateKind.MenuHub))
+        {
+            // The state can lag the scene (e.g. Play pressed directly in a non-Boot scene leaves
+            // it at Boot), and Boot -> MenuHub is not a legal step, so the Menu button silently
+            // did nothing. Go through Loading instead, which every such state allows.
+            return TryBeginSceneLoad(GameStateKind.MenuHub, SceneNames.MenuHub);
         }
 
         Time.timeScale = 1f;

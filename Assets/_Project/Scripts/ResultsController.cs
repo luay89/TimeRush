@@ -560,6 +560,9 @@ public class ResultsController : MonoBehaviour
 
         var restartBound = BindButton(restartButton, RestartGame, nameof(RestartGame));
         var menuBound = BindButton(menuButton, GoToMenu, nameof(GoToMenu));
+        // "Ship Color" had a handler (OnChangeSkinPressed) that was never hooked to the button,
+        // so pressing it did nothing. Optional: older Results layouts have no such button.
+        BindButton(changeSkinButton, OnChangeSkinPressed, nameof(OnChangeSkinPressed), false);
         BindContinueButton();
         BindCoinsContinueButton();
 
@@ -613,6 +616,7 @@ public class ResultsController : MonoBehaviour
 
         restartButton?.onClick.RemoveListener(RestartGame);
         menuButton?.onClick.RemoveListener(GoToMenu);
+        changeSkinButton?.onClick.RemoveListener(OnChangeSkinPressed);
 
         if (continueButton && continueButtonBound)
             continueButton.onClick.RemoveAllListeners();
