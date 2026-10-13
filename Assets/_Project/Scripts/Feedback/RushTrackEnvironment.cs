@@ -389,6 +389,9 @@ public sealed class RushTrackEnvironment : MonoBehaviour
         // still reads as glowing even on the shape's shadowed side.
         SpaceZone startZone = SpaceZones[0];
         asteroidBodyMaterial = CreateLitMaterial(startZone.BodyColor, metallic: 0.05f, smoothness: 0.18f);
+        // Mottled greyscale rock detail under the zone colour, so faces aren't flat paint.
+        asteroidBodyMaterial.mainTexture = ProceduralRockMeshes.RockTexture();
+        asteroidBodyMaterial.SetFloat("_Glossiness", 0.08f);
         debrisMaterial = CreateLitMaterial(startZone.RoofColor, metallic: 0.55f, smoothness: 0.45f);
         asteroidVeinMaterial = CreateEmissiveMaterial(startZone.AccentColor);
         asteroidBodyColor = asteroidBodyMaterial.color;
@@ -526,6 +529,19 @@ public sealed class RushTrackEnvironment : MonoBehaviour
         return cube;
     }
 
+    private static GameObject CreateStaticMesh(string name, Transform parent, Vector3 localPosition, Vector3 localScale, Mesh mesh, Material material, Quaternion? localRotation = null)
+    {
+        var go = new GameObject(name);
+        go.transform.SetParent(parent, false);
+        go.transform.localPosition = localPosition;
+        go.transform.localScale = localScale;
+        go.transform.localRotation = localRotation ?? Quaternion.identity;
+        go.AddComponent<MeshFilter>().sharedMesh = mesh;
+        var renderer = go.AddComponent<MeshRenderer>();
+        renderer.sharedMaterial = material;
+        return go;
+    }
+
     // Sphere variant -- used only for the distant ringed-planetoid silhouette, so it reads as a
     // round world rather than another rock block.
     private static GameObject CreateStaticSphere(string name, Transform parent, Vector3 localPosition, Vector3 localScale, Material material)
@@ -606,53 +622,40 @@ public sealed class RushTrackEnvironment : MonoBehaviour
         Vector3 rotationAxis = new Vector3(Mathf.Sin(jitter * 6.28f), Mathf.Cos(jitter * 4.2f), Mathf.Sin(jitter * 2.5f)).normalized;
         float rotationSpeed = Mathf.Lerp(14f, 5f, t);
 
+        // Procedural faceted rocks replace the old stacks of primitive cubes, which read as boxes
+        // floating beside the track rather than asteroids. Same footprints, archetypes, materials
+        // and zone colour drift as before; only the geometry changed.
+        int rockVariant = row % ProceduralRockMeshes.RockVariantCount;
         switch (shape)
         {
-            case 0: // elongated rock shard with a glowing mineral crack and a chipped corner
+            case 0: // elongated rock shard with a glowing crystal growing out of a crack
             {
-                float h = Mathf.Lerp(1.6f, 3.4f, t);
-                CreateStaticCube("Body", asteroid, Vector3.zero, new Vector3(0.5f, h, 0.5f), bodyMat);
-                CreateStaticCube("Vein", asteroid, new Vector3(0f, h * 0.3f, 0.26f), new Vector3(0.08f, h * 0.5f, 0.02f), veinMat);
-                // Small angled chunk offset from the main shaft -- extra face normals catch the
-                // directional light differently from the body, so the shard reads as a broken,
-                // faceted piece of rock instead of a single flat-shaded box.
-                CreateStaticCube(
-                    "Chip", asteroid,
-                    new Vector3(0.22f, -h * 0.32f, 0.1f),
-                    new Vector3(0.32f, h * 0.22f, 0.34f),
-                    bodyMat,
-                    Quaternion.Euler(14f, 33f, -21f));
+                float h = Mathf.Lerp(1.6f, 3.2f, t);
+                CreateStaticMesh("Body", asteroid, Vector3.zero, new Vector3(0.9f, h, 0.8f), ProceduralRockMeshes.Rock(rockVariant), bodyMat);
+                CreateStaticMesh("Crystal", asteroid, new Vector3(0.18f, h * 0.38f, 0.12f), new Vector3(0.5f, h * 0.32f, 0.5f), ProceduralRockMeshes.Crystal(), veinMat, Quaternion.Euler(0f, 20f, -24f));
                 break;
             }
-            case 1: // squat boulder with a bright mineral seam across the top and a broken-off chunk
+            case 1: // squat boulder with a smaller rock chipped off beside it
             {
-                float h = Mathf.Lerp(1f, 2f, t);
-                CreateStaticCube("Body", asteroid, Vector3.zero, new Vector3(1.1f, h, 0.7f), bodyMat);
-                CreateStaticCube("Seam", asteroid, new Vector3(0f, h * 0.5f + 0.03f, 0f), new Vector3(1.15f, 0.06f, 0.75f), veinMat);
-                // Same reasoning as the rock shard's "Chip": a second, differently-angled mass
-                // breaks up the single-box silhouette so shading reveals distinct facets.
-                CreateStaticCube(
-                    "Chip", asteroid,
-                    new Vector3(-0.55f, -h * 0.28f, 0.28f),
-                    new Vector3(0.5f, h * 0.42f, 0.42f),
-                    bodyMat,
-                    Quaternion.Euler(-11f, 26f, 17f));
+                float h = Mathf.Lerp(1.1f, 2f, t);
+                CreateStaticMesh("Body", asteroid, Vector3.zero, new Vector3(1.6f, h, 1.3f), ProceduralRockMeshes.Rock(rockVariant), bodyMat);
+                CreateStaticMesh("Chunk", asteroid, new Vector3(-0.95f, -h * 0.3f, 0.35f), Vector3.one * 0.55f, ProceduralRockMeshes.Rock(rockVariant + 2), bodyMat, Quaternion.Euler(-11f, 26f, 17f));
                 break;
             }
-            case 2: // layered rock spire with two glowing crystal bands
+            case 2: // tall rock spire studded with a cluster of crystals
             {
-                float h = Mathf.Lerp(2.2f, 4.4f, t);
-                CreateStaticCube("Body", asteroid, Vector3.zero, new Vector3(0.8f, h, 0.6f), bodyMat);
-                CreateStaticCube("VeinLow", asteroid, new Vector3(0f, -h * 0.18f, 0.31f), new Vector3(0.62f, 0.1f, 0.02f), veinMat);
-                CreateStaticCube("VeinHigh", asteroid, new Vector3(0f, h * 0.28f, 0.31f), new Vector3(0.62f, 0.1f, 0.02f), veinMat);
+                float h = Mathf.Lerp(2.2f, 4f, t);
+                CreateStaticMesh("Body", asteroid, Vector3.zero, new Vector3(1.05f, h, 0.95f), ProceduralRockMeshes.Rock(rockVariant), bodyMat);
+                CreateStaticMesh("CrystalA", asteroid, new Vector3(0.3f, h * 0.2f, 0.25f), new Vector3(0.6f, 1.1f, 0.6f), ProceduralRockMeshes.Crystal(), veinMat, Quaternion.Euler(0f, 0f, -35f));
+                CreateStaticMesh("CrystalB", asteroid, new Vector3(0.2f, h * 0.05f, 0.35f), new Vector3(0.4f, 0.7f, 0.4f), ProceduralRockMeshes.Crystal(), veinMat, Quaternion.Euler(30f, 40f, -10f));
                 break;
             }
             case 3: // rock with a broken satellite antenna embedded in it, distress beacon still lit
             {
-                float h = Mathf.Lerp(1.4f, 2.6f, t);
-                CreateStaticCube("Body", asteroid, Vector3.zero, new Vector3(0.7f, h, 0.7f), bodyMat);
-                CreateStaticCube("Antenna", asteroid, new Vector3(0f, h * 0.5f + 0.5f, 0f), new Vector3(0.08f, 1f, 0.08f), metalMat);
-                CreateStaticCube("Beacon", asteroid, new Vector3(0f, h * 0.5f + 1.02f, 0f), new Vector3(0.16f, 0.16f, 0.16f), veinMat);
+                float h = Mathf.Lerp(1.4f, 2.4f, t);
+                CreateStaticMesh("Body", asteroid, Vector3.zero, new Vector3(1.2f, h, 1.1f), ProceduralRockMeshes.Rock(rockVariant), bodyMat);
+                CreateStaticCube("Antenna", asteroid, new Vector3(0f, h * 0.45f + 0.5f, 0f), new Vector3(0.06f, 1f, 0.06f), metalMat);
+                CreateStaticSphere("Beacon", asteroid, new Vector3(0f, h * 0.45f + 1.02f, 0f), Vector3.one * 0.16f, veinMat);
                 break;
             }
             case 4: // drifting broken satellite -- metal hull, support strut, tilted solar panel
@@ -672,14 +675,8 @@ public sealed class RushTrackEnvironment : MonoBehaviour
             {
                 float radius = Mathf.Lerp(0.55f, 1f, t);
                 CreateStaticSphere("Body", asteroid, Vector3.zero, new Vector3(radius, radius, radius) * 2f, bodyMat);
-                // Dull metal debris ring (was the glowing vein material, which read as a bright
-                // white square against the new dark space backdrop).
-                CreateStaticCube(
-                    "Ring", asteroid,
-                    Vector3.zero,
-                    new Vector3(radius * 2.6f, 0.04f, radius * 2.6f),
-                    metalMat,
-                    Quaternion.Euler(78f, 0f, 18f));
+                // A real thin ring (was a flat square cube, which read as a plate behind a ball).
+                CreateStaticMesh("Ring", asteroid, Vector3.zero, Vector3.one * radius * 3.4f, ProceduralRockMeshes.Ring(), metalMat, Quaternion.Euler(12f, 0f, 18f));
                 break;
             }
         }

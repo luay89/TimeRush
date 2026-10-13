@@ -183,7 +183,7 @@ public class MenuHubUI : MonoBehaviour
         title.style.flexShrink = 0f;
         titleBlock.Add(title);
 
-        var subtitle = new Label("Three lanes. Read the gap. Shift depth when the line closes.");
+        var subtitle = new Label("Dodge or shoot down the enemy warships. Watch the ring under each ship: red means it will hit you.");
         subtitle.style.color = Muted;
         subtitle.style.fontSize = 15f;
         subtitle.style.marginTop = 6f;
