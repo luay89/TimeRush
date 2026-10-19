@@ -1,0 +1,72 @@
+# Builds the installable Android APK of Time Rush Nebula on GitHub and publishes it as a
+# pre-release, so it can be downloaded straight onto a phone.
+# Needs three repository secrets (Settings > Secrets and variables > Actions):
+#   UNITY_EMAIL, UNITY_PASSWORD  - the Unity account
+#   UNITY_LICENSE                - contents of the Unity_lic.ulf file from a computer where
+#                                  Unity Hub is signed in (Personal licence is fine)
+# Without them the job only prints this reminder and stops green.
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/time-rush-v2]
+
+permissions:
+  contents: write
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+      UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+      UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+    steps:
+      - name: Unity secrets missing
+        if: ${{ env.UNITY_LICENSE == '' }}
+        run: echo "::notice::Add UNITY_LICENSE, UNITY_EMAIL and UNITY_PASSWORD secrets to build the APK."
+
+      - name: Free disk space
+        if: ${{ env.UNITY_LICENSE != '' }}
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          android: false
+
+      - uses: actions/checkout@v4
+        if: ${{ env.UNITY_LICENSE != '' }}
+        with:
+          lfs: true
+
+      - uses: actions/cache@v4
+        if: ${{ env.UNITY_LICENSE != '' }}
+        with:
+          path: Library
+          key: Library-Android-${{ hashFiles('Packages/**', 'ProjectSettings/**') }}
+          restore-keys: Library-Android-
+
+      - name: Build APK
+        if: ${{ env.UNITY_LICENSE != '' }}
+        uses: game-ci/unity-builder@v4
+        with:
+          targetPlatform: Android
+          buildName: TimeRushNebula
+          buildMethod: TimeRushBuild.BuildAndroidCI
+          androidExportType: androidPackage
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ env.UNITY_LICENSE != '' }}
+        with:
+          name: TimeRushNebula-apk
+          path: build/Android
+
+      - name: Publish pre-release with the APK
+        if: ${{ env.UNITY_LICENSE != '' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nebula-build-${{ github.run_number }}
+          name: Time Rush Nebula (build ${{ github.run_number }})
+          target_commitish: ${{ github.sha }}
+          prerelease: true
+          files: build/Android/*.apk
