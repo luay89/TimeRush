@@ -16,6 +16,12 @@ public sealed class PlayerBlaster : MonoBehaviour
     [Tooltip("How far above the ship a warship can be and still be hit.")]
     [SerializeField] private float maxRange = 15f;
     [SerializeField] private int scorePerKill = 20;
+    // Kills landed within this many seconds of each other chain into a streak with bonus score.
+    [SerializeField] private float streakWindowSeconds = 3f;
+
+    private static readonly string[] StreakNames = { "", "", "DOUBLE KILL", "TRIPLE KILL", "MEGA KILL", "RAMPAGE", "UNSTOPPABLE" };
+    private int killStreak;
+    private float lastKillTime = -100f;
     [SerializeField] private float beamDuration = 0.09f;
 
     private static readonly Color BeamColor = new Color(0.45f, 1f, 1f, 1f);
@@ -116,7 +122,13 @@ public sealed class PlayerBlaster : MonoBehaviour
         Vector3 hitPosition = target.transform.position;
         Explode(hitPosition);
         PlaySound(explosionClip, 0.8f);
-        FloatingScorePopup.Spawn(hitPosition, "+" + scorePerKill, new Color(1f, 0.85f, 0.3f, 1f));
+        float now = Time.time;
+        killStreak = now - lastKillTime <= streakWindowSeconds ? killStreak + 1 : 1;
+        lastKillTime = now;
+        // Each extra kill in a streak is worth half a kill more: 20, 30, 40, 50 ...
+        int award = scorePerKill + scorePerKill * (killStreak - 1) / 2;
+        FloatingScorePopup.Spawn(hitPosition, "+" + award, killStreak > 1 ? new Color(1f, 0.45f, 0.9f, 1f) : new Color(1f, 0.85f, 0.3f, 1f));
+        AnnounceStreak(award);
         // A short kick on the camera sells the kill; goes through the Camera Shake preference.
         GameFeedbackSignals.RaiseAmbientCameraJolt(0.7f);
         // Deactivate now so it can neither collide this frame nor stay in any registry, then free it.
@@ -125,10 +137,30 @@ public sealed class PlayerBlaster : MonoBehaviour
 
         if (controller)
         {
-            controller.AddScore(scorePerKill);
+            controller.AddScore(award);
         }
 
         return true;
+    }
+
+    private void AnnounceStreak(int award)
+    {
+        if (killStreak < 2)
+        {
+            return;
+        }
+
+        string name = StreakNames[Mathf.Min(killStreak, StreakNames.Length - 1)];
+        if (killStreak >= StreakNames.Length)
+        {
+            name += " x" + killStreak;
+        }
+
+        Color color = killStreak == 2 ? new Color(0.4f, 0.95f, 1f, 1f)
+            : killStreak == 3 ? new Color(0.75f, 0.5f, 1f, 1f)
+            : killStreak == 4 ? new Color(1f, 0.4f, 0.85f, 1f)
+            : new Color(1f, 0.6f, 0.15f, 1f);
+        CombatAnnouncer.Announce(name, $"STREAK BONUS  +{award - scorePerKill}", color, killStreak - 2);
     }
 
     private void PlaySound(AudioClip clip, float volume)

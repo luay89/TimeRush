@@ -117,6 +117,11 @@ public class GameController : MonoBehaviour
 
     private void OnDestroy()
     {
+        if (savedFixedDeltaTime > 0f)
+        {
+            RestoreTimeAfterDeathCinematic();
+        }
+
         if (Instance == this)
         {
             Instance = null;
@@ -351,8 +356,49 @@ public class GameController : MonoBehaviour
 
         Debug.Log($"GameOver triggered by {DescribeSource(source)}");
 
-        Time.timeScale = 1f;
+        // The ship explodes in slow motion before the results screen takes over.
+        StartCoroutine(PlayDeathThenShowResults());
+    }
 
+    private const float DeathCinematicSeconds = 1.25f;
+    private const float DeathSlowMotion = 0.3f;
+    private float savedFixedDeltaTime = -1f;
+
+    private System.Collections.IEnumerator PlayDeathThenShowResults()
+    {
+        ShipDeathSequence.Play();
+        savedFixedDeltaTime = Time.fixedDeltaTime;
+        Time.timeScale = DeathSlowMotion;
+        // Keep physics stepping at the same real-time rate so falling ships glide instead of stutter.
+        Time.fixedDeltaTime = savedFixedDeltaTime * DeathSlowMotion;
+
+        float end = Time.unscaledTime + DeathCinematicSeconds;
+        while (Time.unscaledTime < end)
+        {
+            // Ease back toward normal speed over the last stretch for a smooth hand-off.
+            float remaining = (end - Time.unscaledTime) / DeathCinematicSeconds;
+            Time.timeScale = Mathf.Lerp(1f, DeathSlowMotion, Mathf.Clamp01(remaining * 2.5f));
+            Time.fixedDeltaTime = savedFixedDeltaTime * Time.timeScale;
+            yield return null;
+        }
+
+        RestoreTimeAfterDeathCinematic();
+        ShowResultsScreen();
+    }
+
+    private void RestoreTimeAfterDeathCinematic()
+    {
+        if (savedFixedDeltaTime > 0f)
+        {
+            Time.fixedDeltaTime = savedFixedDeltaTime;
+            savedFixedDeltaTime = -1f;
+        }
+
+        Time.timeScale = 1f;
+    }
+
+    private void ShowResultsScreen()
+    {
         if (GameStateMachine.HasInstance)
         {
             if (!GameStateMachine.Instance.ShowResults())

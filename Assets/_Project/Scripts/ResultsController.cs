@@ -407,8 +407,15 @@ public class ResultsController : MonoBehaviour
     private void EnsureSpaceBackdrop(Transform canvasTransform)
     {
         Color space = new Color(0.008f, 0.012f, 0.035f, 1f);
+        // With the living 3D universe behind this screen (CosmosBackdrop) the panel only dims it.
+        bool cosmos = CosmosBackdrop.CoversScene(gameObject.scene.name);
+        if (cosmos)
+        {
+            space = new Color(0.01f, 0.006f, 0.02f, 0.42f);
+        }
+
         Camera camera = Camera.main;
-        if (camera)
+        if (camera && !cosmos)
         {
             camera.clearFlags = CameraClearFlags.SolidColor;
             camera.backgroundColor = space;
@@ -441,7 +448,7 @@ public class ResultsController : MonoBehaviour
         glowImage.raycastTarget = false;
 
         var random = new System.Random(7);
-        for (int i = 0; i < 90; i++)
+        for (int i = 0; i < (cosmos ? 0 : 90); i++)
         {
             var star = new GameObject("Star", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
             star.transform.SetParent(backdrop.transform, false);

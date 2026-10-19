@@ -165,6 +165,13 @@ public sealed class GameStateMachine : MonoBehaviour
 
     public bool Pause()
     {
+        // The run is already over (the ship is exploding on its way to Results): pausing now
+        // would block the Playing -> Results step.
+        if (GameController.Instance && GameController.Instance.IsGameOver)
+        {
+            return false;
+        }
+
         if (!EnsureStateModel().TryTransition(GameStateKind.Paused))
         {
             return false;

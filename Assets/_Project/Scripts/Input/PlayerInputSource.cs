@@ -156,7 +156,7 @@ public sealed class PlayerInputSource : MonoBehaviour
     private void Dispatch(PlayerIntent intent)
     {
         // Held still during the 3-2-1 so a lane/depth press can't queue up a move behind it.
-        if (intent.IsEmpty || RunCountdown.IsCounting)
+        if (intent.IsEmpty || RunCountdown.IsCounting || (GameController.Instance && GameController.Instance.IsGameOver))
         {
             return;
         }

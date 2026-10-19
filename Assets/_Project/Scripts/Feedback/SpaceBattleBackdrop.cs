@@ -404,7 +404,7 @@ public sealed class SpaceBattleBackdrop : MonoBehaviour
 
     // Unit-radius UV sphere; u wraps around longitude, v runs pole to pole (same layout as the
     // built-in sphere, so the equirectangular hull texture maps the same way).
-    private static Mesh CreateUvSphereMesh(int longitudeSegments, int latitudeSegments)
+    internal static Mesh CreateUvSphereMesh(int longitudeSegments, int latitudeSegments)
     {
         int columns = longitudeSegments + 1;
         var vertices = new Vector3[columns * (latitudeSegments + 1)];
