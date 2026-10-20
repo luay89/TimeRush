@@ -45,7 +45,6 @@ public sealed class CosmosBackdrop : MonoBehaviour
     private float planetRadius;
     private float layoutAspect = -1f;
     private ParticleSystem streaks;
-    private ParticleSystem.MainModule streaksMain;
     private Material glowMaterial;
     private Material rockMaterial;
     private Material emberRockMaterial;
@@ -474,7 +473,7 @@ public sealed class CosmosBackdrop : MonoBehaviour
         streaks = go.AddComponent<ParticleSystem>();
         streaks.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
 
-        streaksMain = streaks.main;
+        ParticleSystem.MainModule streaksMain = streaks.main;
         streaksMain.loop = true;
         streaksMain.playOnAwake = true;
         streaksMain.simulationSpace = ParticleSystemSimulationSpace.World;
@@ -635,7 +634,9 @@ public sealed class CosmosBackdrop : MonoBehaviour
 
         if (streaks)
         {
-            streaksMain.simulationSpeed = warp;
+            // Fetch the module from the live system every time; a cached copy can go stale.
+            ParticleSystem.MainModule main = streaks.main;
+            main.simulationSpeed = warp;
         }
 
         if (viewCamera)
