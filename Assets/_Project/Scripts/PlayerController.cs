@@ -110,6 +110,24 @@ public class PlayerController : MonoBehaviour
 
     private void Update()
     {
+        // While the world is frozen (3-2-1 countdown, pause) deltaTime is 0, and Mathf.SmoothDamp
+        // then computes its velocity as 0/0 = NaN. That NaN tilted the ship's Visual into an
+        // invalid rotation, which the bloom pass smeared into a huge white blob over the screen.
+        if (Time.deltaTime <= 0f)
+        {
+            return;
+        }
+
+        if (float.IsNaN(laneVelocity) || float.IsInfinity(laneVelocity))
+        {
+            laneVelocity = 0f;
+        }
+
+        if (float.IsNaN(depthVelocity) || float.IsInfinity(depthVelocity))
+        {
+            depthVelocity = 0f;
+        }
+
         MoveTowardsTargets();
         UpdateVisualMotion();
     }
