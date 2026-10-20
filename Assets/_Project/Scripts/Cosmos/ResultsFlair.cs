@@ -77,14 +77,26 @@ public sealed class ResultsFlair : MonoBehaviour
 
     private IEnumerator Start()
     {
-        // Let ResultsController build/arrange its UI and write the labels first.
-        yield return null;
-        yield return null;
+        // Let ResultsController build/arrange its UI and write the labels first; keep looking for
+        // a little while in case it builds them late.
+        TextMeshProUGUI score = null;
+        for (int frame = 0; frame < 60 && !score; frame++)
+        {
+            yield return null;
+            score = FindLabel("FinalScoreText");
+        }
 
         bool newRecord = ScoreSnapshot.HasValue && ScoreSnapshot.LastRunSetNewBest && ScoreSnapshot.LastScore > 0;
-        StyleTitle(newRecord);
+        try
+        {
+            StyleTitle(newRecord);
+        }
+        catch (System.Exception exception)
+        {
+            Debug.LogException(exception, this);
+        }
 
-        TextMeshProUGUI score = FindLabel("FinalScoreText");
+        Debug.Log($"ResultsFlair: title {(title ? title.name : "not found")}, score {(score ? score.name : "not found")}, new record {newRecord}");
         if (score)
         {
             score.color = newRecord ? new Color(1f, 0.85f, 0.3f, 1f) : score.color;

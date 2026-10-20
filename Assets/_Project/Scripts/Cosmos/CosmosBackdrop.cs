@@ -119,7 +119,11 @@ public sealed class CosmosBackdrop : MonoBehaviour
         BuildStreaks();
 
         // The game's distant dogfight, battle station and cruiser keep fighting behind the menus.
-        gameObject.AddComponent<SpaceBattleBackdrop>();
+        // (Start screen only: behind the busy results panel it just added clutter.)
+        if (mood == Mood.Menu)
+        {
+            gameObject.AddComponent<SpaceBattleBackdrop>();
+        }
 
         if (mood == Mood.Menu)
         {
@@ -298,7 +302,7 @@ public sealed class CosmosBackdrop : MonoBehaviour
         var planetMaterial = Own(new Material(propShader));
         planetMaterial.SetColor("_Color", Color.white);
         planetMaterial.mainTexture = Own(menu ? CreateGasGiantTexture() : CreateMagmaTexture());
-        planetMaterial.SetColor("_EmissionColor", menu ? Color.black : new Color(2.4f, 0.7f, 0.15f));
+        planetMaterial.SetColor("_EmissionColor", menu ? Color.black : new Color(1.1f, 0.35f, 0.08f));
         planetMaterial.SetVector("_SunDir", toSun);
         planetMaterial.SetColor("_Ambient", menu ? new Color(0.05f, 0.04f, 0.09f) : new Color(0.06f, 0.025f, 0.025f));
         planetMaterial.SetColor("_RimColor", menu ? new Color(0.35f, 0.75f, 1.3f) : new Color(1.4f, 0.4f, 0.15f));
@@ -354,9 +358,10 @@ public sealed class CosmosBackdrop : MonoBehaviour
         float halfFov = HalfHorizontalFov();
         const float distance = 900f;
         bool menu = mood == Mood.Menu;
-        float azimuth = halfFov * (menu ? 0.55f : -0.5f);
-        float elevation = FieldOfView * 0.5f * (menu ? 0.42f : 0.5f);
-        float angularRadius = Mathf.Max(halfFov * 0.42f, 9f);
+        // Kept small and up in a corner so it frames the screen instead of filling it.
+        float angularRadius = Mathf.Clamp(halfFov * 0.22f, 4.5f, 7.5f);
+        float azimuth = (halfFov - angularRadius * 0.6f) * (menu ? 1f : -1f);
+        float elevation = FieldOfView * 0.5f - angularRadius * 0.4f;
         planetRadius = distance * Mathf.Tan(angularRadius * Mathf.Deg2Rad);
 
         planet.position = CameraPoint(azimuth, elevation, distance);
@@ -699,7 +704,7 @@ public sealed class CosmosBackdrop : MonoBehaviour
                 float u = x / (float)width;
                 float n = Mathf.PerlinNoise(u * 14f, v * 10f);
                 float ridge = 1f - Mathf.Abs(n - 0.5f) * 2f;
-                float crack = Mathf.Clamp01((ridge - 0.86f) * 7f);
+                float crack = Mathf.Clamp01((ridge - 0.93f) * 10f);
                 float crust = 0.25f + Mathf.PerlinNoise(u * 40f + 7f, v * 30f) * 0.25f;
                 pixels[y * width + x] = new Color(crust * 1.1f, crust * 0.8f, crust * 0.75f, crack);
             }
