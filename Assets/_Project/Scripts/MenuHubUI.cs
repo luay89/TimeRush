@@ -443,7 +443,8 @@ public class MenuHubUI : MonoBehaviour
             eyebrowLabel.style.opacity = 0.65f + 0.35f * Mathf.Sin(t * 2.3f + 1f);
 
             float beat = Mathf.Pow(Mathf.Max(0f, Mathf.Sin(t * 3.1f)), 8f);
-            launchButton.style.scale = new Scale(new Vector2(1f, 1f) * (1f + beat * 0.035f));
+            float pulse = 1f + beat * 0.035f;
+            launchButton.style.scale = new Scale(new Vector3(pulse, pulse, 1f));
             launchButton.style.backgroundColor = Color.Lerp(Orange, new Color(1f, 0.55f, 0.15f, 1f), beat);
         }).Every(16);
     }
