@@ -15,7 +15,32 @@ public static class AndroidReleaseBuildRunner
     private const string ArtifactBaseName = "TimeRush-phasei";
     private static readonly string UnityAndroidPlayerRoot = Path.Combine(EditorApplication.applicationContentsPath, "PlaybackEngines", "AndroidPlayer");
     private static readonly string UnityNdkClangPath = Path.Combine(UnityAndroidPlayerRoot, "NDK", "toolchains", "llvm", "prebuilt", "linux-x86_64", "bin", "clang++");
-    private static readonly string UnitySdkManagerPath = Path.Combine(UnityAndroidPlayerRoot, "SDK", "cmdline-tools", "latest", "bin", "sdkmanager");
+    private static readonly string UnitySdkManagerPath = ResolveSdkManagerPath();
+
+    // The Hub installs command-line tools under a versioned folder (2022.3 ships "6.0"), not
+    // always "latest"; take whichever is present, newest name first.
+    private static string ResolveSdkManagerPath()
+    {
+        string root = Path.Combine(UnityAndroidPlayerRoot, "SDK", "cmdline-tools");
+        string latest = Path.Combine(root, "latest", "bin", "sdkmanager");
+        if (File.Exists(latest) || !Directory.Exists(root))
+        {
+            return latest;
+        }
+
+        string[] versions = Directory.GetDirectories(root);
+        Array.Sort(versions, StringComparer.Ordinal);
+        for (int i = versions.Length - 1; i >= 0; i--)
+        {
+            string candidate = Path.Combine(versions[i], "bin", "sdkmanager");
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        return latest;
+    }
     private static readonly string UnityJdkPath = Path.Combine(UnityAndroidPlayerRoot, "OpenJDK", "bin", "java");
 
     private readonly struct BuildFlagSnapshot
