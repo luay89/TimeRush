@@ -124,6 +124,11 @@ public class ResultsController : MonoBehaviour
 
         Time.timeScale = 1f;
 
+        if (StageSession.HasLastResult && StageSession.LastCleared && StageSession.HasNextStage)
+        {
+            StageSession.SelectStage(StageSession.LastIndex + 1);
+        }
+
         if (GameStateMachine.HasInstance)
         {
             if (!GameStateMachine.Instance.RestartFromResults())
@@ -614,6 +619,8 @@ public class ResultsController : MonoBehaviour
 
         button.onClick.RemoveListener(action);
         button.onClick.AddListener(action);
+        button.onClick.RemoveListener(GameAudio.Click);
+        button.onClick.AddListener(GameAudio.Click);
         return true;
     }
 
@@ -1393,6 +1400,33 @@ public class ResultsController : MonoBehaviour
         }
 
         UpdateRankAndMilestones(bestScore, finalScore);
+        ApplyStageOutcome();
+    }
+
+    // Stage mode: the status line reports stars, and Restart becomes "Next Stage" after a clear.
+    private void ApplyStageOutcome()
+    {
+        if (!StageSession.HasLastResult)
+        {
+            return;
+        }
+
+        StageCatalog.StageDefinition stage = StageCatalog.Stages[StageSession.LastIndex];
+        if (resultStatusText)
+        {
+            resultStatusText.text = StageSession.LastCleared
+                ? $"{stage.Name}  //  STARS {StageSession.LastStars} / {StageCatalog.MaxStars}{(StageSession.LastImprovedBest ? "  //  NEW BEST" : string.Empty)}"
+                : $"{stage.Name}  //  SURVIVE {stage.GoalSeconds:0}s TO CLEAR";
+        }
+
+        if (restartButton)
+        {
+            var label = restartButton.GetComponentInChildren<TextMeshProUGUI>();
+            if (label)
+            {
+                label.text = StageSession.LastCleared && StageSession.HasNextStage ? "Next Stage" : "Retry Stage";
+            }
+        }
     }
 
     /// <summary>

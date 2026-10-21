@@ -132,6 +132,16 @@ public sealed class ResultsFlair : MonoBehaviour
 
         titleText = newRecord ? "NEW RECORD!" : "SHIP DESTROYED";
         titleColor = newRecord ? new Color(1f, 0.82f, 0.25f, 1f) : new Color(1f, 0.32f, 0.38f, 1f);
+        if (StageSession.HasLastResult)
+        {
+            int number = StageSession.LastIndex + 1;
+            titleText = StageSession.LastCleared ? $"STAGE {number} CLEAR" : $"STAGE {number} FAILED";
+            titleColor = StageSession.LastCleared ? new Color(0.3f, 1f, 0.72f, 1f) : new Color(1f, 0.32f, 0.38f, 1f);
+            title.enableAutoSizing = true;
+            title.fontSizeMin = 40f;
+            title.fontSizeMax = title.fontSize;
+        }
+
         title.text = titleText;
         title.color = titleColor;
         title.fontStyle = FontStyles.Bold | FontStyles.Italic;
@@ -244,13 +254,8 @@ public sealed class ResultsFlair : MonoBehaviour
 
     private void PlayClip(AudioClip clip, float volume, float pitch)
     {
-        if (!clip || !FeedbackPreferences.IsAudioEnabled(null))
-        {
-            return;
-        }
-
         audioSource.pitch = pitch;
-        audioSource.PlayOneShot(clip, volume);
+        GameAudio.PlaySfx(audioSource, clip, volume);
     }
 
     private void Confetti(RectTransform anchor)

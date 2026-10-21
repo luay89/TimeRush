@@ -41,6 +41,8 @@ public class GameController : MonoBehaviour
     public int BestScore { get; private set; }
     public float AliveTime => aliveTime;
     public bool IsGameOver => _gameOver;
+    /// <summary>True once a Stage-mode run has survived its goal time (the run ends in a win).</summary>
+    public bool IsStageCleared { get; private set; }
     public bool HasContinuedThisRun => hasContinuedThisRun;
     public bool IsPlayerInvulnerable => invulnerabilityTimer > 0f;
     public float InvulnerabilityRemaining => invulnerabilityTimer;
@@ -143,6 +145,12 @@ public class GameController : MonoBehaviour
         }
 
         aliveTime += Time.deltaTime;
+        if (StageSession.IsStageRun && aliveTime >= StageSession.Current.GoalSeconds)
+        {
+            CompleteStage();
+            return;
+        }
+
         TickScoreTimers();
         TickDifficultyDebug();
     }
@@ -329,7 +337,55 @@ public class GameController : MonoBehaviour
         sessionLossCount++;
         resultsSceneLoadRequested = true;
         GameFeedbackSignals.RaiseGameOver();
+        StageSession.Finish(false, CurrentScore);
 
+        RunLossReason lossReason = source is KillOnHit ? RunLossReason.ObstacleCollision : RunLossReason.None;
+        RecordFinishedRun(lossReason, hasContinuedThisRun);
+
+        Debug.Log($"GameOver triggered by {DescribeSource(source)}");
+
+        // The ship explodes in slow motion before the results screen takes over.
+        StartCoroutine(PlayDeathThenShowResults());
+    }
+
+    /// <summary>
+    /// Stage mode's finish line: the run ends as a win -- no explosion, no continue offer -- with a
+    /// short "STAGE CLEAR" beat before Results shows the stars.
+    /// </summary>
+    private void CompleteStage()
+    {
+        if (_gameOver || resultsSceneLoadRequested || !EnsureResultsSceneInBuildSettings())
+        {
+            return;
+        }
+
+        _gameOver = true;
+        IsStageCleared = true;
+        resultsSceneLoadRequested = true;
+        GrantInvulnerability(10f);
+        UpdateScoreText();
+
+        StageSession.Finish(true, CurrentScore);
+        // A cleared stage can't be "continued": record it as already continued so Results hides it.
+        RecordFinishedRun(RunLossReason.None, true);
+
+        CombatAnnouncer.Announce("STAGE CLEAR", $"STAGE {StageSession.Current.Number}  //  {StageSession.LastStars} / {StageCatalog.MaxStars} STARS", new Color(0.3f, 1f, 0.75f, 1f), -1);
+        GameAudio.Confirm();
+        StartCoroutine(ShowResultsAfter(1.4f));
+    }
+
+    private System.Collections.IEnumerator ShowResultsAfter(float seconds)
+    {
+        yield return new WaitForSecondsRealtime(seconds);
+        ShowResultsScreen();
+    }
+
+    /// <summary>
+    /// Bookkeeping shared by every way a run can end: records, daily stats, progression, coins,
+    /// and the snapshot the Results scene reads.
+    /// </summary>
+    private void RecordFinishedRun(RunLossReason lossReason, bool blockContinue)
+    {
         // Submit the run through the local competition leaderboard. This is the single
         // authoritative point where the highest-score personal record is updated; it shares
         // the BEST_SCORE store so HUD/Results best score never diverges, and reports whether
@@ -351,13 +407,7 @@ public class GameController : MonoBehaviour
         // so the eventual final death re-earns the full amount exactly once.
         PlayerWallet.EarnPending(PlayerWallet.CoinsForScore(CurrentScore));
         // Persist final state so the Results scene can decide whether continue is still allowed.
-        RunLossReason lossReason = source is KillOnHit ? RunLossReason.ObstacleCollision : RunLossReason.None;
-        ScoreSnapshot.Set(CurrentScore, BestScore, hasContinuedThisRun, true, lossReason, setNewBest, aliveTime);
-
-        Debug.Log($"GameOver triggered by {DescribeSource(source)}");
-
-        // The ship explodes in slow motion before the results screen takes over.
-        StartCoroutine(PlayDeathThenShowResults());
+        ScoreSnapshot.Set(CurrentScore, BestScore, blockContinue, true, lossReason, setNewBest, aliveTime);
     }
 
     private const float DeathCinematicSeconds = 1.25f;
@@ -517,15 +567,17 @@ public class GameController : MonoBehaviour
 
     private float GetEffectiveAliveTime()
     {
+        // Later stages start further along the difficulty curve.
+        float headStart = StageSession.IsStageRun ? StageSession.Current.DifficultyHeadStart : 0f;
         if (difficultyEaseTimer <= 0f || continueDifficultyEaseSeconds <= 0f)
         {
-            return aliveTime;
+            return aliveTime + headStart;
         }
 
         float normalized = Mathf.Clamp01(1f - (difficultyEaseTimer / continueDifficultyEaseSeconds));
         float multiplier = Mathf.Lerp(continueDifficultyEaseFactor, 1f, normalized);
         multiplier = Mathf.Clamp(multiplier, 0.1f, 1f);
-        return aliveTime * multiplier;
+        return (aliveTime + headStart) * multiplier;
     }
 
     private int MaxFlowChain => Mathf.Max(1, nearMissesPerFlowLevel) * Mathf.Max(1, maxFlowMultiplier - 1);
