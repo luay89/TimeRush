@@ -567,7 +567,7 @@ public class MenuHubUI : MonoBehaviour
             }
         });
         tile.style.width = 104f;
-        tile.style.height = 112f;
+        tile.style.height = 124f;
         tile.style.marginLeft = 4f;
         tile.style.marginRight = 4f;
         tile.style.marginTop = 4f;
@@ -609,6 +609,8 @@ public class MenuHubUI : MonoBehaviour
         }
 
         tile.Add(starRow);
+        starRow.style.flexShrink = 0f;
+        starRow.style.height = 18f;
 
         var goal = new Label($"{stage.GoalSeconds:0}s");
         goal.style.color = new Color(Muted.r, Muted.g, Muted.b, 0.8f);
@@ -616,6 +618,13 @@ public class MenuHubUI : MonoBehaviour
         goal.style.marginTop = 3f;
         goal.pickingMode = PickingMode.Ignore;
         tile.Add(goal);
+
+        // A fixed-height tile must not squash its rows into each other.
+        foreach (VisualElement child in tile.Children())
+        {
+            child.style.flexShrink = 0f;
+        }
+
         return tile;
     }
 
