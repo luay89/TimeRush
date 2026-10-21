@@ -845,7 +845,9 @@ public sealed class SpaceBattleBackdrop : MonoBehaviour
 
     private void BuildExplosionSystems(Shader glowShader, Texture2D glowTexture)
     {
-        explosionSystem = CreateBurstSystem("Explosions", glowShader, glowTexture, new Color(3.2f, 1.5f, 0.45f), 260);
+        // Tints stay near 1: the burst is additive and dozens of particles stack on one spot, so an
+        // HDR tint here summed past the bloom clamp and bloomed into huge white disks.
+        explosionSystem = CreateBurstSystem("Explosions", glowShader, glowTexture, new Color(1.3f, 0.7f, 0.28f), 260);
         var main = explosionSystem.main;
         main.startLifetime = new ParticleSystem.MinMaxCurve(0.5f, 1.3f);
         main.startSpeed = new ParticleSystem.MinMaxCurve(2f, 11f);
@@ -864,11 +866,11 @@ public sealed class SpaceBattleBackdrop : MonoBehaviour
         sizeOverLifetime.enabled = true;
         sizeOverLifetime.size = new ParticleSystem.MinMaxCurve(1f, AnimationCurve.EaseInOut(0f, 0.6f, 1f, 1.6f));
 
-        flashSystem = CreateBurstSystem("ExplosionFlash", glowShader, glowTexture, new Color(4f, 3.2f, 2.4f), 12);
+        flashSystem = CreateBurstSystem("ExplosionFlash", glowShader, glowTexture, new Color(1.5f, 1.25f, 1f), 12);
         var flashMain = flashSystem.main;
         flashMain.startLifetime = 0.22f;
         flashMain.startSpeed = 0f;
-        flashMain.startSize = 12f;
+        flashMain.startSize = 7f;
         var flashFade = flashSystem.colorOverLifetime;
         flashFade.enabled = true;
         var flashGradient = new Gradient();
@@ -903,6 +905,8 @@ public sealed class SpaceBattleBackdrop : MonoBehaviour
         particleRenderer.sharedMaterial = CreateGlowMaterial(glowShader, tint, glowTexture);
         particleRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         particleRenderer.receiveShadows = false;
+        // Distant scenery: never let one billboard grow past a small slice of the screen.
+        particleRenderer.maxParticleSize = 0.06f;
         system.Play();
         return system;
     }
@@ -929,7 +933,7 @@ public sealed class SpaceBattleBackdrop : MonoBehaviour
 
         if (flash)
         {
-            var flashParams = new ParticleSystem.EmitParams { position = position, startSize = 12f * scale, velocity = Vector3.zero };
+            var flashParams = new ParticleSystem.EmitParams { position = position, startSize = 7f * scale, velocity = Vector3.zero };
             flashSystem.Emit(flashParams, 1);
         }
     }
