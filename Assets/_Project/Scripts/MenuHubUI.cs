@@ -4,7 +4,8 @@ using UnityEngine.UIElements;
 
 /// <summary>
 /// Builds the lightweight TimeRush menu at runtime while preserving the existing
-/// MenuHub -> Game scene contract.
+/// MenuHub -> Game scene contract. Besides the hangar and LAUNCH (endless run) it hosts the
+/// Stages, Settings, How to Play and Credits panels, and asks before quitting on Back/Escape.
 /// </summary>
 public class MenuHubUI : MonoBehaviour
 {
@@ -17,19 +18,13 @@ public class MenuHubUI : MonoBehaviour
     private static readonly Color Orange = new Color(1f, 0.36f, 0.12f, 1f);
     private static readonly Color Violet = new Color(0.56f, 0.34f, 1f, 1f);
     private static readonly Color Muted = new Color(0.62f, 0.7f, 0.86f, 1f);
+    private static readonly Color Mint = new Color(0.3f, 1f, 0.72f, 1f);
     private bool startRequestInProgress;
 
-    private bool cameraShakeEnabled;
-    private bool reduceFlashingEnabled;
-    private bool audioEnabled;
     private ProgressionConfig progressionConfig;
 
     private void Awake()
     {
-        cameraShakeEnabled = FeedbackPreferences.IsCameraShakeEnabled(feedbackConfig);
-        reduceFlashingEnabled = FeedbackPreferences.IsReduceFlashingEnabled(feedbackConfig);
-        audioEnabled = FeedbackPreferences.IsAudioEnabled(feedbackConfig);
-
         progressionConfig = Resources.Load<ProgressionConfig>("ProgressionConfig");
         if (!progressionConfig)
         {
@@ -59,34 +54,39 @@ public class MenuHubUI : MonoBehaviour
 
     private static readonly Color Gold = new Color(1f, 0.82f, 0.3f, 1f);
     private static readonly Color Glass = new Color(0.03f, 0.04f, 0.1f, 0.62f);
+    private static readonly Color PanelGlass = new Color(0.03f, 0.045f, 0.11f, 0.97f);
 
+    private VisualElement root;
     private Label titleLabel;
     private Label eyebrowLabel;
     private Button launchButton;
+    private Button stagesButton;
     private Label hangarName;
     private Label hangarStatus;
     private VisualElement hangarSwatch;
     private Button hangarBuyButton;
     private Label coinsLabel;
     private int hangarIndex;
+    private VisualElement openPanel;
 
     private void BuildUI(UIDocument document)
     {
-        var root = document.rootVisualElement;
+        root = document.rootVisualElement;
         root.Clear();
         root.style.flexGrow = 1f;
         root.style.backgroundColor = Color.clear;
-        root.style.paddingLeft = 18f;
-        root.style.paddingRight = 18f;
-        root.style.paddingTop = 26f;
-        root.style.paddingBottom = 20f;
         root.style.alignItems = Align.Center;
 
+        // Padding lives on the frame (not the root) so full-screen panels can cover edge to edge.
         var frame = new VisualElement();
         frame.style.width = new Length(100f, LengthUnit.Percent);
-        frame.style.maxWidth = FrameMaxWidth;
+        frame.style.maxWidth = FrameMaxWidth + 36f;
         frame.style.flexGrow = 1f;
         frame.style.flexDirection = FlexDirection.Column;
+        frame.style.paddingLeft = 18f;
+        frame.style.paddingRight = 18f;
+        frame.style.paddingTop = 26f;
+        frame.style.paddingBottom = 20f;
         root.Add(frame);
 
         frame.Add(BuildHeader());
@@ -100,6 +100,22 @@ public class MenuHubUI : MonoBehaviour
 
         frame.Add(BuildControlDeck());
         StartAnimations();
+    }
+
+    private void Update()
+    {
+        // Android's Back button arrives as Escape: close the open panel, else ask before quitting.
+        if (Input.GetKeyDown(KeyCode.Escape))
+        {
+            if (openPanel != null)
+            {
+                ClosePanels();
+            }
+            else
+            {
+                ShowQuitConfirm();
+            }
+        }
     }
 
     private VisualElement BuildHeader()
@@ -213,7 +229,7 @@ public class MenuHubUI : MonoBehaviour
 
         deck.Add(BuildHangar());
 
-        launchButton = new Button(StartRun) { text = "LAUNCH" };
+        launchButton = new Button(() => StartRun(-1)) { text = "LAUNCH" };
         launchButton.style.height = 70f;
         launchButton.style.marginTop = 14f;
         launchButton.style.backgroundColor = Orange;
@@ -227,36 +243,48 @@ public class MenuHubUI : MonoBehaviour
         launchButton.style.textShadow = new TextShadow { offset = new Vector2(0f, 2f), blurRadius = 6f, color = new Color(0.4f, 0.05f, 0f, 0.8f) };
         deck.Add(launchButton);
 
-        var toggles = new VisualElement();
-        toggles.style.flexDirection = FlexDirection.Row;
-        toggles.style.justifyContent = Justify.SpaceBetween;
-        toggles.style.marginTop = 12f;
-        deck.Add(toggles);
+        var modeHint = new Label("ENDLESS RUN  •  HOW FAR CAN YOU GO?");
+        modeHint.style.color = Muted;
+        modeHint.style.fontSize = 10f;
+        modeHint.style.letterSpacing = 1.5f;
+        modeHint.style.unityTextAlign = TextAnchor.MiddleCenter;
+        modeHint.style.marginTop = 5f;
+        deck.Add(modeHint);
 
-        toggles.Add(CreateToggleChip("SOUND", () => audioEnabled, enabled =>
-        {
-            audioEnabled = enabled;
-            FeedbackPreferences.SetAudioEnabled(enabled);
-        }));
-        toggles.Add(CreateToggleChip("SHAKE", () => cameraShakeEnabled, enabled =>
-        {
-            cameraShakeEnabled = enabled;
-            FeedbackPreferences.SetCameraShakeEnabled(enabled);
-        }));
-        toggles.Add(CreateToggleChip("CALM FX", () => reduceFlashingEnabled, enabled =>
-        {
-            reduceFlashingEnabled = enabled;
-            FeedbackPreferences.SetReduceFlashingEnabled(enabled);
-        }));
+        var nav = new VisualElement();
+        nav.style.flexDirection = FlexDirection.Row;
+        nav.style.marginTop = 12f;
+        deck.Add(nav);
 
-        var hint = new Label("SWIPE  left / right  lane   •   up / down  depth   •   TAP  fire\nKEYS  A D  /  W S   •   SPACE  fire");
-        hint.style.color = Muted;
-        hint.style.fontSize = 11f;
-        hint.style.unityTextAlign = TextAnchor.MiddleCenter;
-        hint.style.whiteSpace = WhiteSpace.Normal;
-        hint.style.marginTop = 10f;
-        deck.Add(hint);
+        StageProgressModel stages = StageProgress.Load();
+        stagesButton = CreateNavButton($"STAGES  {stages.TotalStars}/{stages.MaxTotalStars}", Mint, ShowStages);
+        nav.Add(stagesButton);
+        nav.Add(CreateNavButton("SETTINGS", Cyan, ShowSettings));
+        nav.Add(CreateNavButton("HOW TO PLAY", Cyan, ShowHelp));
         return deck;
+    }
+
+    private Button CreateNavButton(string text, Color accent, System.Action onClick)
+    {
+        var button = new Button(() =>
+        {
+            GameAudio.Click();
+            onClick();
+        })
+        { text = text };
+        button.style.flexGrow = 1f;
+        button.style.flexBasis = 0f;
+        button.style.height = 44f;
+        button.style.marginLeft = 3f;
+        button.style.marginRight = 3f;
+        button.style.fontSize = 12f;
+        button.style.unityFontStyleAndWeight = FontStyle.Bold;
+        button.style.letterSpacing = 1f;
+        button.style.color = accent;
+        button.style.backgroundColor = new Color(accent.r, accent.g, accent.b, 0.12f);
+        StyleBorder(button, 1f, new Color(accent.r, accent.g, accent.b, 0.6f));
+        StyleRadius(button, 12f);
+        return button;
     }
 
     // ---------------------------------------------------------------- hangar (ship colours)
@@ -342,6 +370,7 @@ public class MenuHubUI : MonoBehaviour
 
     private void BrowseHangar(int direction)
     {
+        GameAudio.Click();
         int count = ShipSkinCatalog.Skins.Length;
         hangarIndex = ((hangarIndex + direction) % count + count) % count;
         string id = ShipSkinCatalog.Skins[hangarIndex].Id;
@@ -362,6 +391,7 @@ public class MenuHubUI : MonoBehaviour
         string id = ShipSkinCatalog.Skins[hangarIndex].Id;
         if (ShipSkinManager.TryPurchase(id))
         {
+            GameAudio.Confirm();
             ShipSkinManager.Select(id);
             if (CosmosBackdrop.Active)
             {
@@ -395,24 +425,327 @@ public class MenuHubUI : MonoBehaviour
         hangarBuyButton.style.display = affordable ? DisplayStyle.Flex : DisplayStyle.None;
     }
 
-    // ---------------------------------------------------------------- toggles + animation
+    // ---------------------------------------------------------------- panels
 
-    private VisualElement CreateToggleChip(string labelText, System.Func<bool> getter, System.Action<bool> setter)
+    /// <summary>Opens a menu panel by name (stages, settings, help, credits, quit). Used by the screenshot validator.</summary>
+    public void OpenPanelForCapture(string panel)
     {
+        switch (panel)
+        {
+            case "stages": ShowStages(); break;
+            case "settings": ShowSettings(); break;
+            case "help": ShowHelp(); break;
+            case "credits": ShowCredits(); break;
+            case "quit": ShowQuitConfirm(); break;
+        }
+    }
+
+    public void ClosePanels()
+    {
+        if (openPanel != null)
+        {
+            openPanel.RemoveFromHierarchy();
+            openPanel = null;
+        }
+    }
+
+    // A dimmed full-screen layer with a glass card: title, close button and a scrolling body.
+    private VisualElement OpenPanel(string title, Color accent)
+    {
+        ClosePanels();
+
+        var overlay = new VisualElement();
+        overlay.style.position = Position.Absolute;
+        overlay.style.left = 0f;
+        overlay.style.right = 0f;
+        overlay.style.top = 0f;
+        overlay.style.bottom = 0f;
+        overlay.style.backgroundColor = new Color(0.005f, 0.01f, 0.04f, 0.78f);
+        overlay.style.alignItems = Align.Center;
+        overlay.style.justifyContent = Justify.Center;
+        overlay.style.paddingLeft = 16f;
+        overlay.style.paddingRight = 16f;
+        overlay.style.paddingTop = 24f;
+        overlay.style.paddingBottom = 24f;
+        // Tapping the dimmed area outside the card closes it.
+        overlay.RegisterCallback<PointerDownEvent>(evt =>
+        {
+            if (evt.target == overlay)
+            {
+                ClosePanels();
+            }
+        });
+        root.Add(overlay);
+        openPanel = overlay;
+
+        var card = new VisualElement();
+        card.style.width = new Length(100f, LengthUnit.Percent);
+        card.style.maxWidth = 600f;
+        card.style.maxHeight = new Length(100f, LengthUnit.Percent);
+        card.style.backgroundColor = PanelGlass;
+        StyleBorder(card, 1.5f, new Color(accent.r, accent.g, accent.b, 0.75f));
+        StyleRadius(card, 22f);
+        card.style.paddingLeft = 20f;
+        card.style.paddingRight = 20f;
+        card.style.paddingTop = 16f;
+        card.style.paddingBottom = 18f;
+        overlay.Add(card);
+
+        var header = new VisualElement();
+        header.style.flexDirection = FlexDirection.Row;
+        header.style.alignItems = Align.Center;
+        header.style.justifyContent = Justify.SpaceBetween;
+        header.style.flexShrink = 0f;
+        header.style.marginBottom = 10f;
+        card.Add(header);
+
+        var heading = new Label(title);
+        heading.style.color = accent;
+        heading.style.fontSize = 24f;
+        heading.style.unityFontStyleAndWeight = FontStyle.Bold;
+        heading.style.letterSpacing = 3f;
+        header.Add(heading);
+
+        var close = new Button(() =>
+        {
+            GameAudio.Click();
+            ClosePanels();
+        })
+        { text = "X" };
+        close.style.width = 44f;
+        close.style.height = 44f;
+        close.style.fontSize = 18f;
+        close.style.unityFontStyleAndWeight = FontStyle.Bold;
+        close.style.color = Color.white;
+        close.style.backgroundColor = new Color(1f, 1f, 1f, 0.08f);
+        StyleBorder(close, 1f, new Color(1f, 1f, 1f, 0.3f));
+        StyleRadius(close, 22f);
+        header.Add(close);
+
+        var scroll = new ScrollView(ScrollViewMode.Vertical);
+        scroll.style.flexShrink = 1f;
+        scroll.verticalScrollerVisibility = ScrollerVisibility.Auto;
+        scroll.horizontalScrollerVisibility = ScrollerVisibility.Hidden;
+        card.Add(scroll);
+        return scroll;
+    }
+
+    private void ShowStages()
+    {
+        VisualElement body = OpenPanel("STAGES", Mint);
+        StageProgressModel progress = StageProgress.Load();
+
+        var intro = Paragraph($"Survive each stage to clear it and unlock the next. Score more for extra stars.   {progress.TotalStars} / {progress.MaxTotalStars} stars", Muted, 12f);
+        intro.style.marginBottom = 10f;
+        body.Add(intro);
+
+        var grid = new VisualElement();
+        grid.style.flexDirection = FlexDirection.Row;
+        grid.style.flexWrap = Wrap.Wrap;
+        grid.style.justifyContent = Justify.Center;
+        body.Add(grid);
+
+        for (int i = 0; i < StageCatalog.Count; i++)
+        {
+            grid.Add(CreateStageTile(i, progress));
+        }
+    }
+
+    private VisualElement CreateStageTile(int index, StageProgressModel progress)
+    {
+        StageCatalog.StageDefinition stage = StageCatalog.Stages[index];
+        bool unlocked = progress.IsUnlocked(index);
+        int stars = progress.GetStars(index);
+
+        var tile = new Button(() =>
+        {
+            if (unlocked)
+            {
+                GameAudio.Confirm();
+                ClosePanels();
+                StartRun(index);
+            }
+        });
+        tile.style.width = 104f;
+        tile.style.height = 112f;
+        tile.style.marginLeft = 4f;
+        tile.style.marginRight = 4f;
+        tile.style.marginTop = 4f;
+        tile.style.marginBottom = 4f;
+        tile.style.paddingLeft = 4f;
+        tile.style.paddingRight = 4f;
+        tile.style.flexDirection = FlexDirection.Column;
+        tile.style.alignItems = Align.Center;
+        tile.style.justifyContent = Justify.Center;
+        Color edge = !unlocked ? new Color(1f, 1f, 1f, 0.18f) : stars > 0 ? Mint : Gold;
+        tile.style.backgroundColor = unlocked ? new Color(edge.r, edge.g, edge.b, 0.1f) : new Color(1f, 1f, 1f, 0.03f);
+        StyleBorder(tile, 1.5f, new Color(edge.r, edge.g, edge.b, unlocked ? 0.75f : 1f));
+        StyleRadius(tile, 16f);
+        tile.SetEnabled(unlocked);
+
+        var number = new Label(unlocked ? stage.Number.ToString() : "LOCKED");
+        number.style.color = unlocked ? Color.white : Muted;
+        number.style.fontSize = unlocked ? 30f : 13f;
+        number.style.unityFontStyleAndWeight = FontStyle.Bold;
+        number.pickingMode = PickingMode.Ignore;
+        tile.Add(number);
+
+        var name = new Label(stage.Name);
+        name.style.color = unlocked ? Muted : new Color(Muted.r, Muted.g, Muted.b, 0.6f);
+        name.style.fontSize = 9f;
+        name.style.unityTextAlign = TextAnchor.MiddleCenter;
+        name.style.whiteSpace = WhiteSpace.Normal;
+        name.style.marginTop = 2f;
+        name.pickingMode = PickingMode.Ignore;
+        tile.Add(name);
+
+        var starRow = new VisualElement();
+        starRow.style.flexDirection = FlexDirection.Row;
+        starRow.style.marginTop = 6f;
+        starRow.pickingMode = PickingMode.Ignore;
+        for (int s = 0; s < StageCatalog.MaxStars; s++)
+        {
+            starRow.Add(new StarIcon(s < stars, 16f));
+        }
+
+        tile.Add(starRow);
+
+        var goal = new Label($"{stage.GoalSeconds:0}s");
+        goal.style.color = new Color(Muted.r, Muted.g, Muted.b, 0.8f);
+        goal.style.fontSize = 9f;
+        goal.style.marginTop = 3f;
+        goal.pickingMode = PickingMode.Ignore;
+        tile.Add(goal);
+        return tile;
+    }
+
+    private void ShowSettings()
+    {
+        VisualElement body = OpenPanel("SETTINGS", Cyan);
+
+        body.Add(SectionLabel("AUDIO"));
+        body.Add(CreateToggleRow("Sound", () => FeedbackPreferences.IsAudioEnabled(feedbackConfig), FeedbackPreferences.SetAudioEnabled));
+        body.Add(CreateLevelRow("Music", () => FeedbackPreferences.MusicVolume, v => FeedbackPreferences.MusicVolume = v));
+        body.Add(CreateLevelRow("Effects", () => FeedbackPreferences.SfxVolume, v => FeedbackPreferences.SfxVolume = v));
+
+        body.Add(SectionLabel("COMFORT"));
+        body.Add(CreateToggleRow("Camera shake", () => FeedbackPreferences.IsCameraShakeEnabled(feedbackConfig), FeedbackPreferences.SetCameraShakeEnabled));
+        body.Add(CreateToggleRow("Calm effects (less flashing)", () => FeedbackPreferences.IsReduceFlashingEnabled(feedbackConfig), FeedbackPreferences.SetReduceFlashingEnabled));
+        body.Add(CreateToggleRow("Vibration", () => FeedbackPreferences.IsVibrationEnabled, FeedbackPreferences.SetVibrationEnabled));
+
+        var links = new VisualElement();
+        links.style.flexDirection = FlexDirection.Row;
+        links.style.marginTop = 16f;
+        body.Add(links);
+        links.Add(CreateNavButton("SHOW TUTORIAL AGAIN", Gold, () =>
+        {
+            FeedbackPreferences.SetTutorialSeen(false);
+            ShowHelp();
+        }));
+        links.Add(CreateNavButton("CREDITS", Violet, ShowCredits));
+    }
+
+    private void ShowHelp()
+    {
+        VisualElement body = OpenPanel("HOW TO PLAY", Cyan);
+        body.Add(HelpRow("MOVE", "Swipe left / right to change lane.\nKeys: A / D or arrow keys."));
+        body.Add(HelpRow("DEPTH", "Swipe up / down to fly further back or closer.\nKeys: W / S."));
+        body.Add(HelpRow("FIRE", "Tap the screen to shoot your laser.\nKey: Space."));
+        body.Add(HelpRow("DANGER", "A red ring under a warship means it is on your line and will hit you. Move or shoot it."));
+        body.Add(HelpRow("SHIELD", "Fly through a blue shield to become untouchable for a few seconds."));
+        body.Add(HelpRow("FLOW", "Near misses build a score multiplier. Keep the chain going."));
+        body.Add(HelpRow("PAUSE", "Tap the pause button, or press Esc / P."));
+    }
+
+    private void ShowCredits()
+    {
+        VisualElement body = OpenPanel("CREDITS", Violet);
+        body.Add(HelpRow("GAME", "Time Rush: Nebula Edition\nDesign & development: luay89"));
+        body.Add(HelpRow("MUSIC", "Composed and synthesised in code at runtime (no audio files)."));
+        body.Add(HelpRow("SOUND FX", "Kenney (kenney.nl), CC0 1.0. Interface sounds synthesised in code."));
+        body.Add(HelpRow("ENGINE", "Made with Unity. Text: TextMesh Pro."));
+        var version = Paragraph($"Version {Application.version}", Muted, 11f);
+        version.style.marginTop = 10f;
+        version.style.unityTextAlign = TextAnchor.MiddleCenter;
+        body.Add(version);
+    }
+
+    private void ShowQuitConfirm()
+    {
+        VisualElement body = OpenPanel("LEAVE?", Orange);
+        body.Add(Paragraph("Close Time Rush? Your progress is saved.", Color.white, 15f));
+
+        var row = new VisualElement();
+        row.style.flexDirection = FlexDirection.Row;
+        row.style.marginTop = 16f;
+        body.Add(row);
+        row.Add(CreateNavButton("STAY", Cyan, ClosePanels));
+        row.Add(CreateNavButton("QUIT GAME", Orange, () =>
+        {
+            ClosePanels();
+            Application.Quit();
+        }));
+    }
+
+    private static Label SectionLabel(string text)
+    {
+        var label = new Label(text);
+        label.style.color = Gold;
+        label.style.fontSize = 11f;
+        label.style.letterSpacing = 3f;
+        label.style.unityFontStyleAndWeight = FontStyle.Bold;
+        label.style.marginTop = 10f;
+        label.style.marginBottom = 4f;
+        return label;
+    }
+
+    private static Label Paragraph(string text, Color color, float size)
+    {
+        var label = new Label(text);
+        label.style.color = color;
+        label.style.fontSize = size;
+        label.style.whiteSpace = WhiteSpace.Normal;
+        return label;
+    }
+
+    private static VisualElement HelpRow(string title, string text)
+    {
+        var row = new VisualElement();
+        row.style.flexDirection = FlexDirection.Row;
+        row.style.alignItems = Align.FlexStart;
+        row.style.marginTop = 6f;
+        row.style.marginBottom = 6f;
+
+        var key = new Label(title);
+        key.style.width = 92f;
+        key.style.flexShrink = 0f;
+        key.style.color = Cyan;
+        key.style.fontSize = 13f;
+        key.style.unityFontStyleAndWeight = FontStyle.Bold;
+        key.style.letterSpacing = 1.5f;
+        row.Add(key);
+
+        var body = Paragraph(text, Color.white, 13f);
+        body.style.flexShrink = 1f;
+        body.style.flexGrow = 1f;
+        row.Add(body);
+        return row;
+    }
+
+    private VisualElement CreateToggleRow(string labelText, System.Func<bool> getter, System.Action<bool> setter)
+    {
+        var row = SettingRow(labelText);
         var button = new Button();
-        button.style.flexGrow = 1f;
-        button.style.flexBasis = 0f;
+        button.style.width = 84f;
         button.style.height = 38f;
-        button.style.marginLeft = 3f;
-        button.style.marginRight = 3f;
-        button.style.fontSize = 12f;
+        button.style.fontSize = 13f;
         button.style.unityFontStyleAndWeight = FontStyle.Bold;
         StyleRadius(button, 12f);
 
         System.Action refresh = () =>
         {
             bool value = getter();
-            button.text = labelText + (value ? "  ON" : "  OFF");
+            button.text = value ? "ON" : "OFF";
             button.style.backgroundColor = value ? new Color(Cyan.r, Cyan.g, Cyan.b, 0.22f) : new Color(1f, 1f, 1f, 0.05f);
             button.style.color = value ? Cyan : Muted;
             StyleBorder(button, 1f, value ? new Color(Cyan.r, Cyan.g, Cyan.b, 0.7f) : new Color(Muted.r, Muted.g, Muted.b, 0.35f));
@@ -422,11 +755,105 @@ public class MenuHubUI : MonoBehaviour
         {
             setter(!getter());
             refresh();
+            GameAudio.Click();
         };
 
         refresh();
+        row.Add(button);
+        return row;
+    }
+
+    // A 10-step level control: [-] segmented bar [+]. Big touch targets, no tiny slider thumb.
+    private VisualElement CreateLevelRow(string labelText, System.Func<float> getter, System.Action<float> setter)
+    {
+        const int Steps = 10;
+        var row = SettingRow(labelText);
+
+        var control = new VisualElement();
+        control.style.flexDirection = FlexDirection.Row;
+        control.style.alignItems = Align.Center;
+        row.Add(control);
+
+        var segments = new VisualElement[Steps];
+        System.Action refresh = null;
+        System.Action<int> apply = level =>
+        {
+            setter(Mathf.Clamp(level, 0, Steps) / (float)Steps);
+            refresh();
+            GameAudio.Click();
+        };
+
+        control.Add(SmallButton("-", () => apply(Mathf.RoundToInt(getter() * Steps) - 1)));
+
+        var bar = new VisualElement();
+        bar.style.flexDirection = FlexDirection.Row;
+        bar.style.marginLeft = 6f;
+        bar.style.marginRight = 6f;
+        control.Add(bar);
+        for (int i = 0; i < Steps; i++)
+        {
+            int level = i + 1;
+            var segment = new VisualElement();
+            segment.style.width = 13f;
+            segment.style.height = 26f;
+            segment.style.marginLeft = 1.5f;
+            segment.style.marginRight = 1.5f;
+            StyleRadius(segment, 3f);
+            segment.RegisterCallback<PointerDownEvent>(_ => apply(level));
+            segments[i] = segment;
+            bar.Add(segment);
+        }
+
+        control.Add(SmallButton("+", () => apply(Mathf.RoundToInt(getter() * Steps) + 1)));
+
+        refresh = () =>
+        {
+            int level = Mathf.RoundToInt(getter() * Steps);
+            for (int i = 0; i < Steps; i++)
+            {
+                segments[i].style.backgroundColor = i < level ? Cyan : new Color(1f, 1f, 1f, 0.1f);
+            }
+        };
+
+        refresh();
+        return row;
+    }
+
+    private static Button SmallButton(string text, System.Action onClick)
+    {
+        var button = new Button(onClick) { text = text };
+        button.style.width = 38f;
+        button.style.height = 38f;
+        button.style.fontSize = 18f;
+        button.style.unityFontStyleAndWeight = FontStyle.Bold;
+        button.style.color = Cyan;
+        button.style.backgroundColor = new Color(Cyan.r, Cyan.g, Cyan.b, 0.1f);
+        StyleBorder(button, 1f, new Color(Cyan.r, Cyan.g, Cyan.b, 0.5f));
+        StyleRadius(button, 19f);
         return button;
     }
+
+    private static VisualElement SettingRow(string labelText)
+    {
+        var row = new VisualElement();
+        row.style.flexDirection = FlexDirection.Row;
+        row.style.alignItems = Align.Center;
+        row.style.justifyContent = Justify.SpaceBetween;
+        row.style.minHeight = 48f;
+        row.style.borderBottomWidth = 1f;
+        row.style.borderBottomColor = new Color(1f, 1f, 1f, 0.06f);
+
+        var label = new Label(labelText);
+        label.style.color = Color.white;
+        label.style.fontSize = 14f;
+        label.style.flexShrink = 1f;
+        label.style.whiteSpace = WhiteSpace.Normal;
+        label.style.marginRight = 8f;
+        row.Add(label);
+        return row;
+    }
+
+    // ---------------------------------------------------------------- animation
 
     // Title colour breathing between cyan and violet glow, eyebrow shimmer, and a heartbeat pulse
     // on the launch button. UI Toolkit scheduler, so no Update loop and nothing touches gameplay.
@@ -477,13 +904,26 @@ public class MenuHubUI : MonoBehaviour
         element.style.paddingBottom = vertical;
     }
 
-    private void StartRun()
+    // ---------------------------------------------------------------- launching
+
+    /// <param name="stageIndex">-1 for the endless run, otherwise the stage to play.</param>
+    private void StartRun(int stageIndex)
     {
         if (startRequestInProgress)
         {
             return;
         }
 
+        if (stageIndex >= 0)
+        {
+            StageSession.SelectStage(stageIndex);
+        }
+        else
+        {
+            StageSession.SelectEndless();
+        }
+
+        GameAudio.Confirm();
         startRequestInProgress = true;
         if (launchButton != null)
         {
@@ -526,5 +966,60 @@ public class MenuHubUI : MonoBehaviour
         }
 
         SceneManager.LoadScene(gameSceneName);
+    }
+
+    /// <summary>A five-pointed star drawn with the vector API (no font glyph needed).</summary>
+    private sealed class StarIcon : VisualElement
+    {
+        private readonly bool filled;
+
+        public StarIcon(bool filled, float size)
+        {
+            this.filled = filled;
+            style.width = size;
+            style.height = size;
+            style.marginLeft = 1f;
+            style.marginRight = 1f;
+            pickingMode = PickingMode.Ignore;
+            generateVisualContent += Draw;
+        }
+
+        private void Draw(MeshGenerationContext context)
+        {
+            Rect rect = contentRect;
+            var painter = context.painter2D;
+            Vector2 center = rect.center;
+            float outer = Mathf.Min(rect.width, rect.height) * 0.5f;
+            float inner = outer * 0.45f;
+
+            painter.BeginPath();
+            for (int i = 0; i < 10; i++)
+            {
+                float angle = Mathf.Deg2Rad * (-90f + i * 36f);
+                float radius = i % 2 == 0 ? outer : inner;
+                var point = center + new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * radius;
+                if (i == 0)
+                {
+                    painter.MoveTo(point);
+                }
+                else
+                {
+                    painter.LineTo(point);
+                }
+            }
+
+            painter.ClosePath();
+            if (filled)
+            {
+                painter.fillColor = Gold;
+                painter.Fill();
+            }
+            else
+            {
+                painter.strokeColor = new Color(1f, 1f, 1f, 0.35f);
+                painter.lineWidth = 1.2f;
+                painter.Stroke();
+            }
+        }
     }
 }
