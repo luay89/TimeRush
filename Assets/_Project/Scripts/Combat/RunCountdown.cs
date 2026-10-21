@@ -18,6 +18,11 @@ public sealed class RunCountdown : MonoBehaviour
 
     public static bool IsCounting { get; private set; }
 
+    /// <summary>Forces the first-run tutorial card on (true) or off (false); null follows the saved flag.</summary>
+    public static bool? TutorialOverride;
+
+    private const float TutorialMinSeconds = 0.5f;
+
     private TextMeshProUGUI label;
     private Canvas canvas;
     private float elapsed;
@@ -26,6 +31,9 @@ public sealed class RunCountdown : MonoBehaviour
     private AudioClip tickClip;
     private AudioClip goClip;
     private int lastStep = -1;
+    private GameObject tutorialCard;
+    private TextMeshProUGUI tutorialPrompt;
+    private float tutorialShownFor;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void Install()
@@ -56,6 +64,10 @@ public sealed class RunCountdown : MonoBehaviour
     private void Awake()
     {
         BuildUi();
+        if (TutorialOverride ?? !FeedbackPreferences.HasSeenTutorial)
+        {
+            BuildTutorialCard();
+        }
         audioSource = gameObject.AddComponent<AudioSource>();
         audioSource.playOnAwake = false;
         audioSource.spatialBlend = 0f;
@@ -107,6 +119,12 @@ public sealed class RunCountdown : MonoBehaviour
             Time.timeScale = 0f;
         }
 
+        if (tutorialCard)
+        {
+            TickTutorial();
+            return;
+        }
+
         elapsed += Time.unscaledDeltaTime;
         int step = Mathf.FloorToInt(elapsed / StepSeconds);
 
@@ -141,6 +159,86 @@ public sealed class RunCountdown : MonoBehaviour
         ShowStep("GO!", goLocal, new Color(1f, 0.6f, 0.2f, 1f));
     }
 
+    // The world stays frozen behind the card until the player taps (or presses a key); only then
+    // does "3, 2, 1" start, so the dismissing tap can never fire or steer the ship.
+    private void TickTutorial()
+    {
+        tutorialShownFor += Time.unscaledDeltaTime;
+        if (tutorialPrompt)
+        {
+            float blink = 0.55f + 0.45f * Mathf.Sin(tutorialShownFor * 4f);
+            tutorialPrompt.alpha = blink;
+        }
+
+        bool tapped = Input.anyKeyDown || (Input.touchCount > 0 && Input.GetTouch(0).phase == TouchPhase.Began);
+        if (!tapped || tutorialShownFor < TutorialMinSeconds)
+        {
+            return;
+        }
+
+        if (TutorialOverride == null)
+        {
+            FeedbackPreferences.SetTutorialSeen(true);
+        }
+
+        GameAudio.Click();
+        Destroy(tutorialCard);
+        tutorialCard = null;
+    }
+
+    private void BuildTutorialCard()
+    {
+        tutorialCard = new GameObject("TutorialCard", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        tutorialCard.transform.SetParent(canvas.transform, false);
+        var dim = tutorialCard.GetComponent<Image>();
+        dim.color = new Color(0.005f, 0.01f, 0.045f, 0.8f);
+        var dimRect = (RectTransform)tutorialCard.transform;
+        dimRect.anchorMin = Vector2.zero;
+        dimRect.anchorMax = Vector2.one;
+        dimRect.offsetMin = dimRect.offsetMax = Vector2.zero;
+
+        var panel = new GameObject("Panel", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        panel.transform.SetParent(tutorialCard.transform, false);
+        panel.GetComponent<Image>().color = new Color(0.035f, 0.055f, 0.13f, 0.96f);
+        var panelRect = (RectTransform)panel.transform;
+        // Stretches with the screen width so it fits portrait phones as well as landscape.
+        panelRect.anchorMin = new Vector2(0.04f, 0.5f);
+        panelRect.anchorMax = new Vector2(0.96f, 0.5f);
+        panelRect.sizeDelta = new Vector2(0f, 640f);
+
+        AddText(panel.transform, "HOW TO FLY", 72f, new Color(0.12f, 0.95f, 1f, 1f), 230f, 100f);
+        AddText(panel.transform, "<color=#FFFFFF>SWIPE LEFT / RIGHT</color>   change lane   (A / D)", 34f, Muted, 120f, 56f);
+        AddText(panel.transform, "<color=#FFFFFF>SWIPE UP / DOWN</color>   fly deeper or closer   (W / S)", 34f, Muted, 50f, 56f);
+        AddText(panel.transform, "<color=#FFFFFF>TAP</color>   fire your laser   (Space)", 34f, Muted, -20f, 56f);
+        AddText(panel.transform, "Red ring under a warship = it will hit you.   Blue orb = shield.", 28f, new Color(1f, 0.82f, 0.3f, 1f), -110f, 56f);
+        tutorialPrompt = AddText(panel.transform, "TAP ANYWHERE TO START", 40f, new Color(1f, 0.55f, 0.2f, 1f), -225f, 70f);
+    }
+
+    private static readonly Color Muted = new Color(0.62f, 0.7f, 0.86f, 1f);
+
+    private static TextMeshProUGUI AddText(Transform parent, string text, float size, Color color, float y, float height)
+    {
+        var go = new GameObject("Text", typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
+        go.transform.SetParent(parent, false);
+        var tmp = go.GetComponent<TextMeshProUGUI>();
+        tmp.text = text;
+        tmp.fontSize = size;
+        tmp.color = color;
+        tmp.fontWeight = FontWeight.Bold;
+        tmp.alignment = TextAlignmentOptions.Center;
+        tmp.raycastTarget = false;
+        tmp.enableWordWrapping = false;
+        tmp.enableAutoSizing = true;
+        tmp.fontSizeMin = size * 0.4f;
+        tmp.fontSizeMax = size;
+        var rect = tmp.rectTransform;
+        rect.anchorMin = new Vector2(0f, 0.5f);
+        rect.anchorMax = new Vector2(1f, 0.5f);
+        rect.anchoredPosition = new Vector2(0f, y);
+        rect.sizeDelta = new Vector2(-60f, height);
+        return tmp;
+    }
+
     private static bool IsPlayingState()
     {
         return !GameStateMachine.HasInstance || GameStateMachine.Instance.CurrentState == GameStateKind.Playing;
@@ -158,10 +256,7 @@ public sealed class RunCountdown : MonoBehaviour
 
     private void PlayClip(AudioClip clip)
     {
-        if (clip && FeedbackPreferences.IsAudioEnabled(null))
-        {
-            audioSource.PlayOneShot(clip, 0.5f);
-        }
+        GameAudio.PlaySfx(audioSource, clip, 0.5f);
     }
 
     private void BuildUi()
