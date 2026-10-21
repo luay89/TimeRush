@@ -190,10 +190,7 @@ public sealed class CosmosBackdrop : MonoBehaviour
         }
 
         launchTime = Time.unscaledTime;
-        if (audioSource && launchClip && FeedbackPreferences.IsAudioEnabled(null))
-        {
-            audioSource.PlayOneShot(launchClip, 0.7f);
-        }
+        GameAudio.PlaySfx(audioSource, launchClip, 0.7f);
     }
 
     // ---------------------------------------------------------------- camera, sky, light

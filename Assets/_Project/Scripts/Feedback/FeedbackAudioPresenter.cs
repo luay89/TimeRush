@@ -140,12 +140,7 @@ public sealed class FeedbackAudioPresenter : MonoBehaviour
 
     private void Play(AudioClip clip, float volume)
     {
-        if (!audioSource || !clip || !FeedbackPreferences.IsAudioEnabled(feedbackConfig))
-        {
-            return;
-        }
-
-        audioSource.PlayOneShot(clip, volume);
+        GameAudio.PlaySfx(audioSource, clip, volume, feedbackConfig);
     }
 
     /// <summary>
@@ -154,13 +149,13 @@ public sealed class FeedbackAudioPresenter : MonoBehaviour
     /// </summary>
     private void PlayPitched(AudioClip clip, float volume, float pitch)
     {
-        if (!pitchedSource || !clip || !FeedbackPreferences.IsAudioEnabled(feedbackConfig))
+        if (!pitchedSource)
         {
             return;
         }
 
         pitchedSource.pitch = pitch;
-        pitchedSource.PlayOneShot(clip, volume);
+        GameAudio.PlaySfx(pitchedSource, clip, volume, feedbackConfig);
     }
 
     /// <summary>

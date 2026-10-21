@@ -435,10 +435,7 @@ public sealed class EnemyGunnery : MonoBehaviour
 
     private void PlayClip(AudioClip clip, float volume)
     {
-        if (clip && FeedbackPreferences.IsAudioEnabled(null))
-        {
-            audioSource.PlayOneShot(clip, volume);
-        }
+        GameAudio.PlaySfx(audioSource, clip, volume);
     }
 
     // Lock-on warning: two short, soft, in-tune beeps (A5 then E6, a perfect fifth). The earlier

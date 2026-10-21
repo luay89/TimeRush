@@ -87,6 +87,7 @@ public sealed class PowerUpPickup : MonoBehaviour
 
         consumed = true;
         controller.GrantInvulnerability(shieldDurationSeconds);
+        GameAudio.Pickup();
         FloatingScorePopup.Spawn(transform.position, "SHIELD", new Color(0.4f, 0.8f, 1f, 1f));
         Destroy(gameObject);
     }

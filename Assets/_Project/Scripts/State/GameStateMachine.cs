@@ -7,8 +7,10 @@ using UnityEngine.SceneManagement;
 /// </summary>
 public sealed class GameStateMachine : MonoBehaviour
 {
+#pragma warning disable CS0414 // read only in device builds (see Awake)
     [SerializeField, Tooltip("Stable frame-rate cap applied once at boot (device builds only) so frame pacing/power draw stay predictable regardless of the device's native display refresh rate. Does not affect gameplay timing, which is already Time.deltaTime based.")]
     private int targetFrameRate = 60;
+#pragma warning restore CS0414
 
     public static GameStateMachine Instance { get; private set; }
     public static bool HasInstance => Instance != null;

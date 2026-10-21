@@ -165,10 +165,7 @@ public sealed class PlayerBlaster : MonoBehaviour
 
     private void PlaySound(AudioClip clip, float volume)
     {
-        if (audioSource && clip && FeedbackPreferences.IsAudioEnabled(null))
-        {
-            audioSource.PlayOneShot(clip, volume);
-        }
+        GameAudio.PlaySfx(audioSource, clip, volume);
     }
 
     private static AudioClip CreateLaserClip()

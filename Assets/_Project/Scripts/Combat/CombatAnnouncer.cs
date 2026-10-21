@@ -90,11 +90,11 @@ public sealed class CombatAnnouncer : MonoBehaviour
         headline.gameObject.SetActive(true);
         subline.gameObject.SetActive(true);
 
-        if (chimeStep >= 0 && chimeClip && FeedbackPreferences.IsAudioEnabled(null))
+        if (chimeStep >= 0 && chimeClip)
         {
             float semitones = ChimeSemitones[Mathf.Min(chimeStep, ChimeSemitones.Length - 1)];
             audioSource.pitch = Mathf.Pow(2f, semitones / 12f);
-            audioSource.PlayOneShot(chimeClip, 0.5f);
+            GameAudio.PlaySfx(audioSource, chimeClip, 0.5f);
         }
     }
 

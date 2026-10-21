@@ -37,6 +37,7 @@ public sealed class ProceduralSoundtrack : MonoBehaviour
     private Track playing = Track.None;
     private float audioCheckTimer;
     private bool audioEnabled = true;
+    private float musicLevel = FeedbackPreferences.DefaultMusicVolume;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void Install()
@@ -143,6 +144,7 @@ public sealed class ProceduralSoundtrack : MonoBehaviour
         {
             audioCheckTimer = 0.4f;
             audioEnabled = FeedbackPreferences.IsAudioEnabled(null);
+            musicLevel = FeedbackPreferences.MusicVolume;
         }
 
         if (wanted != playing && clips.TryGetValue(wanted, out AudioClip clip) && clip)
@@ -157,7 +159,7 @@ public sealed class ProceduralSoundtrack : MonoBehaviour
         }
 
         bool paused = GameStateMachine.HasInstance && GameStateMachine.Instance.CurrentState == GameStateKind.Paused;
-        float target = audioEnabled ? MusicVolume * (paused ? 0.35f : 1f) : 0f;
+        float target = audioEnabled ? MusicVolume * musicLevel * (paused ? 0.35f : 1f) : 0f;
         float step = Time.unscaledDeltaTime / FadeSeconds * MusicVolume;
         for (int i = 0; i < sources.Length; i++)
         {

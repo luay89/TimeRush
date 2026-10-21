@@ -92,11 +92,12 @@ public sealed class ShipDeathSequence : MonoBehaviour
         var audioSource = gameObject.AddComponent<AudioSource>();
         audioSource.playOnAwake = false;
         audioSource.spatialBlend = 0f;
-        if (FeedbackPreferences.IsAudioEnabled(null))
+        if (GameAudio.CanPlay())
         {
-            AudioClip boom = Own(CreateBoomClip());
-            audioSource.PlayOneShot(boom, 1f);
+            GameAudio.PlaySfx(audioSource, Own(CreateBoomClip()), 1f);
         }
+
+        GameAudio.Vibrate();
 
         Update();
     }
