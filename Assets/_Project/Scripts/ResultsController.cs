@@ -112,6 +112,7 @@ public class ResultsController : MonoBehaviour
         Time.timeScale = 1f;
         UpdateScoreLabels();
         RefreshContinueState();
+        PresentBossBattleVictory();
         LogUiDiagnostics();
     }
 
@@ -943,13 +944,14 @@ public class ResultsController : MonoBehaviour
                     : button.name == ChangeSkinButtonName
                         ? new Color(0.62f, 0.7f, 0.86f, 1f) // Muted -- secondary action, matches MenuHubUI/PauseOverlayPresenter's Muted tone
                         : new Color(1f, 0.36f, 0.12f, 1f); // Orange -- Restart and any other fallback
+        Color surface = Color.Lerp(new Color(0.025f, 0.035f, 0.08f, 1f), accent, 0.2f);
 
         var label = button.GetComponentInChildren<TextMeshProUGUI>();
         if (label)
         {
             label.fontSize = 32f;
             label.fontWeight = FontWeight.Bold;
-            label.color = new Color(0.015f, 0.025f, 0.075f, 1f);
+            label.color = accent;
             label.alignment = TextAlignmentOptions.Center;
             label.raycastTarget = false;
         }
@@ -957,15 +959,24 @@ public class ResultsController : MonoBehaviour
         var image = button.GetComponent<Image>();
         if (image)
         {
-            image.color = accent;
+            image.color = surface;
         }
 
+        var outline = button.GetComponent<Outline>();
+        if (!outline)
+        {
+            outline = button.gameObject.AddComponent<Outline>();
+        }
+        outline.effectColor = new Color(accent.r, accent.g, accent.b, 0.85f);
+        outline.effectDistance = new Vector2(1.5f, -1.5f);
+        outline.useGraphicAlpha = true;
+
         var colors = button.colors;
-        colors.normalColor = accent;
-        colors.highlightedColor = Color.Lerp(accent, Color.white, 0.16f);
-        colors.pressedColor = Color.Lerp(accent, Color.black, 0.18f);
+        colors.normalColor = surface;
+        colors.highlightedColor = Color.Lerp(surface, accent, 0.28f);
+        colors.pressedColor = Color.Lerp(surface, Color.black, 0.18f);
         colors.selectedColor = colors.highlightedColor;
-        colors.disabledColor = new Color(accent.r, accent.g, accent.b, 0.3f);
+        colors.disabledColor = new Color(surface.r, surface.g, surface.b, 0.55f);
         colors.colorMultiplier = 1f;
         button.colors = colors;
     }
@@ -1401,6 +1412,30 @@ public class ResultsController : MonoBehaviour
 
         UpdateRankAndMilestones(bestScore, finalScore);
         ApplyStageOutcome();
+    }
+
+    private void PresentBossBattleVictory()
+    {
+        if (CombatGameModeSession.Mode != CombatGameMode.BossBattle || !CombatGameModeSession.BossBattleCompleted)
+        {
+            return;
+        }
+
+        if (gameOverTitle)
+        {
+            gameOverTitle.text = "MISSION COMPLETE";
+        }
+
+        SetStatusMessage("LEVIATHAN DESTROYED  •  BOSS BATTLE WON");
+        if (continueButton)
+        {
+            continueButton.gameObject.SetActive(false);
+        }
+
+        if (coinsContinueButton)
+        {
+            coinsContinueButton.gameObject.SetActive(false);
+        }
     }
 
     // Stage mode: the status line reports stars, and Restart becomes "Next Stage" after a clear.

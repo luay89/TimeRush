@@ -6,6 +6,22 @@ using UnityEngine;
 [CreateAssetMenu(fileName = "GameBalanceConfig", menuName = "TimeRush/Game Balance Config")]
 public sealed class GameBalanceConfig : ScriptableObject
 {
+    [Header("Space Combat (Phase 1+)")]
+    [Tooltip("When enabled, the Game scene runs the new 3D space-combat mission loop instead of the legacy obstacle-runner loop. Disabled keeps the original runner gameplay intact.")]
+    public bool enableSpaceCombat = false;
+
+    [Min(1f), Tooltip("Soft clamp for player movement in combat mode (world units from mission origin).")]
+    public float combatPlayAreaRadius = 14f;
+
+    [Min(0.1f), Tooltip("Base player movement speed in combat mode.")]
+    public float combatPlayerMoveSpeed = 11f;
+
+    [Min(0.1f), Tooltip("How quickly the player ship accelerates toward the requested movement vector.")]
+    public float combatPlayerAcceleration = 14f;
+
+    [Min(0.1f), Tooltip("Forward drift applied in combat mode so the player is always moving through space.")]
+    public float combatForwardSpeed = 6f;
+
     [Header("Difficulty")]
     [Min(1f)] public float trainingDuration = 25f;
     [Min(2f)] public float maxDifficultySeconds = 120f;
@@ -86,6 +102,10 @@ public sealed class GameBalanceConfig : ScriptableObject
 
     private void OnValidate()
     {
+        combatPlayAreaRadius = Mathf.Max(4f, combatPlayAreaRadius);
+        combatPlayerMoveSpeed = Mathf.Max(0.1f, combatPlayerMoveSpeed);
+        combatPlayerAcceleration = Mathf.Max(0.1f, combatPlayerAcceleration);
+        combatForwardSpeed = Mathf.Max(0f, combatForwardSpeed);
         trainingDuration = Mathf.Max(1f, trainingDuration);
         maxDifficultySeconds = Mathf.Max(trainingDuration + 1f, maxDifficultySeconds);
         minSpawnInterval = Mathf.Max(0.2f, minSpawnInterval);

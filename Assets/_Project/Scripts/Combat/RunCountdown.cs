@@ -166,7 +166,7 @@ public sealed class RunCountdown : MonoBehaviour
         tutorialShownFor += Time.unscaledDeltaTime;
         if (tutorialPrompt)
         {
-            float blink = 0.55f + 0.45f * Mathf.Sin(tutorialShownFor * 4f);
+            float blink = 0.9f + 0.1f * Mathf.Sin(tutorialShownFor * 4f);
             tutorialPrompt.alpha = blink;
         }
 

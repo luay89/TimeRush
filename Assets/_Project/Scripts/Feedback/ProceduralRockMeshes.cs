@@ -92,7 +92,7 @@ public static class ProceduralRockMeshes
             return rockTexture;
         }
 
-        const int size = 128;
+        const int size = 256;
         rockTexture = new Texture2D(size, size, TextureFormat.RGBA32, true) { name = "ProceduralRock", wrapMode = TextureWrapMode.Repeat };
         var random = new System.Random(4242);
         float offsetX = (float)random.NextDouble() * 100f;
@@ -137,20 +137,24 @@ public static class ProceduralRockMeshes
 
     private static Mesh BuildRock(int variant)
     {
-        BuildIcosphere(2, out Vector3[] points, out int[] faces);
+        BuildIcosphere(3, out Vector3[] points, out int[] faces);
         var random = new System.Random(9173 + variant * 131);
 
         // Bumps and dents from a handful of random directions: positive amplitudes push lobes
         // out, negative ones carve flattened faces and crater-like dents.
-        const int features = 9;
+        const int features = 16;
         var directions = new Vector3[features];
         var amplitudes = new float[features];
         var sharpness = new float[features];
         for (int k = 0; k < features; k++)
         {
             directions[k] = RandomDirection(random);
-            amplitudes[k] = Mathf.Lerp(-0.3f, 0.22f, (float)random.NextDouble());
-            sharpness[k] = Mathf.Lerp(2f, 7f, (float)random.NextDouble());
+            amplitudes[k] = k < 5
+                ? Mathf.Lerp(-0.34f, -0.2f, (float)random.NextDouble())
+                : Mathf.Lerp(-0.22f, 0.24f, (float)random.NextDouble());
+            sharpness[k] = k < 5
+                ? Mathf.Lerp(9f, 17f, (float)random.NextDouble())
+                : Mathf.Lerp(2f, 8f, (float)random.NextDouble());
         }
 
         var stretch = new Vector3(

@@ -25,6 +25,11 @@ using UnityEngine.UIElements;
 ///   TIMERUSH_SHOT_MENU_ONLY "1" stops after the menu captures (no run)
 ///   TIMERUSH_SHOT_LAYERS   "1" also saves the 3D, canvas and UI Toolkit layers separately
 ///   TIMERUSH_SHOT_STAGE    stage number to launch instead of an endless run
+///   TIMERUSH_SHOT_MODE     survival, campaign, or boss
+///   TIMERUSH_SHOT_FIRE     "1" holds the primary weapon during gameplay
+///   TIMERUSH_SHOT_WEAPON   zero-based combat weapon slot to select
+///   TIMERUSH_SHOT_SPECIAL  "1" activates the combat shield burst
+///   TIMERUSH_SHOT_BOSS_VICTORY "1" completes a boss-battle validation run as a victory
 ///   TIMERUSH_SHOT_PAUSE    "1" opens the pause menu after the last gameplay capture and captures it
 ///   TIMERUSH_SHOT_RESULTS  "1" ends the run after the gameplay captures and captures Results
 ///   TIMERUSH_SHOT_TUTORIAL "1" shows the first-run "how to fly" card (skipped otherwise)
@@ -61,6 +66,8 @@ public static class GameSceneScreenshotRunner
     private static int nextCapture;
     private static int menuStep;
     private static string[] menuPanels = new string[0];
+    private static bool bossDamageApplied;
+    private static bool specialAbilityActivated;
     private static RenderTexture panelTarget;
     private static PanelSettings hookedPanel;
     private static bool runRequested;
@@ -90,6 +97,8 @@ public static class GameSceneScreenshotRunner
     {
         SessionState.SetBool(ActiveKey, true);
         SessionState.SetBool(BatchKey, batch);
+        bossDamageApplied = false;
+        specialAbilityActivated = false;
         EditorSceneManager.OpenScene(BootScenePath, OpenSceneMode.Single);
         EditorApplication.update -= Update;
         EditorApplication.update += Update;
@@ -236,13 +245,22 @@ public static class GameSceneScreenshotRunner
             return;
         }
 
-        if (int.TryParse(Env("TIMERUSH_SHOT_STAGE"), out int stage) && stage > 0)
+        string mode = (Env("TIMERUSH_SHOT_MODE") ?? string.Empty).Trim().ToLowerInvariant();
+        if (mode == "campaign")
         {
-            StageSession.SelectStage(stage - 1);
+            CombatGameModeSession.BeginCampaign();
+        }
+        else if (mode == "boss")
+        {
+            CombatGameModeSession.BeginBossBattle();
+        }
+        else if (int.TryParse(Env("TIMERUSH_SHOT_STAGE"), out int stage) && stage > 0)
+        {
+            CombatGameModeSession.BeginStage(stage - 1);
         }
         else
         {
-            StageSession.SelectEndless();
+            CombatGameModeSession.BeginSurvival();
         }
 
         RunCountdown.TutorialOverride = Env("TIMERUSH_SHOT_TUTORIAL") == "1";
@@ -273,12 +291,44 @@ public static class GameSceneScreenshotRunner
         if (Env("TIMERUSH_SHOT_GODMODE") == "1")
         {
             GameController.Instance.GrantInvulnerability(1f);
+            CombatPlayerController protectedPlayer = UnityEngine.Object.FindObjectOfType<CombatPlayerController>();
+            CombatShipHealth playerHealth = protectedPlayer ? protectedPlayer.GetComponent<CombatShipHealth>() : null;
+            if (playerHealth)
+            {
+                playerHealth.SetTemporaryInvulnerable(1f);
+            }
+        }
+
+        CombatPlayerInputSource inputSource = UnityEngine.Object.FindObjectOfType<CombatPlayerInputSource>();
+        if (inputSource)
+        {
+            inputSource.SetVisualValidationFireHeld(Env("TIMERUSH_SHOT_FIRE") == "1");
+        }
+
+        if (Env("TIMERUSH_SHOT_SPECIAL") == "1" && !specialAbilityActivated)
+        {
+            CombatSpecialAbilityController ability = UnityEngine.Object.FindObjectOfType<CombatSpecialAbilityController>();
+            specialAbilityActivated = ability && ability.Activate();
+        }
+
+        if (int.TryParse(Env("TIMERUSH_SHOT_WEAPON"), out int weaponIndex))
+        {
+            CombatWeaponController weapons = UnityEngine.Object.FindObjectOfType<CombatWeaponController>();
+            if (weapons && weapons.WeaponCount > 0)
+            {
+                int targetIndex = Mathf.Clamp(weaponIndex, 0, weapons.WeaponCount - 1);
+                while (weapons.ActiveIndex != targetIndex)
+                {
+                    weapons.SelectNext();
+                }
+            }
         }
 
         if (nextCapture < captureTimes.Length && PhaseAge >= captureTimes[nextCapture])
         {
             Capture("game_" + nextCapture);
             nextCapture++;
+            ApplyValidationBossDamage();
         }
 
         if (nextCapture < captureTimes.Length)
@@ -297,6 +347,24 @@ public static class GameSceneScreenshotRunner
 
     private static void AfterGameplay()
     {
+        if (Env("TIMERUSH_SHOT_BOSS_VICTORY") == "1")
+        {
+            CombatBossController boss = UnityEngine.Object.FindObjectOfType<CombatBossController>();
+            CombatShipHealth health = boss ? boss.GetComponent<CombatShipHealth>() : null;
+            CombatPlayerController player = UnityEngine.Object.FindObjectOfType<CombatPlayerController>();
+            if (!health || !player)
+            {
+                Finish("Boss-victory capture requested, but the boss or player ship was not found.", 1);
+                return;
+            }
+
+            bool applied = health.TryApplyDamage(new CombatDamage(100000f, CombatDamageKind.Explosive), player.gameObject);
+            Debug.Log($"[BossVictoryCapture] damageApplied={applied} mode={CombatGameModeSession.Mode} completed={CombatGameModeSession.BossBattleCompleted} stageCleared={(GameController.Instance && GameController.Instance.IsStageCleared)}");
+            Capture("boss_destroyed");
+            Enter(Phase.WaitResults);
+            return;
+        }
+
         if (Env("TIMERUSH_SHOT_RESULTS") == "1")
         {
             GameController.Instance.TriggerGameOver();
@@ -305,6 +373,31 @@ public static class GameSceneScreenshotRunner
         }
 
         Finish(null, 0);
+    }
+
+    private static void ApplyValidationBossDamage()
+    {
+        if (bossDamageApplied || (Env("TIMERUSH_SHOT_MODE") ?? string.Empty).Trim().ToLowerInvariant() != "boss")
+        {
+            return;
+        }
+
+        string rawDamage = Env("TIMERUSH_SHOT_BOSS_DAMAGE");
+        if (!float.TryParse(rawDamage, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float amount) || amount <= 0f)
+        {
+            return;
+        }
+
+        CombatBossController boss = UnityEngine.Object.FindObjectOfType<CombatBossController>();
+        CombatShipHealth health = boss ? boss.GetComponent<CombatShipHealth>() : null;
+        CombatPlayerController player = UnityEngine.Object.FindObjectOfType<CombatPlayerController>();
+        if (!health || !player)
+        {
+            return;
+        }
+
+        bossDamageApplied = true;
+        health.TryApplyDamage(new CombatDamage(amount, CombatDamageKind.Energy), player.gameObject);
     }
 
     private static void ReadSize()

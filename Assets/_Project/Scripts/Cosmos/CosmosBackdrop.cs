@@ -384,18 +384,19 @@ public sealed class CosmosBackdrop : MonoBehaviour
         bool menu = mood == Mood.Menu;
         rockMaterial = Own(new Material(standard));
         rockMaterial.mainTexture = ProceduralRockMeshes.RockTexture();
-        rockMaterial.color = menu ? new Color(0.58f, 0.55f, 0.6f) : new Color(0.32f, 0.26f, 0.25f);
+        rockMaterial.color = menu ? new Color(0.58f, 0.55f, 0.6f) : new Color(0.35f, 0.4f, 0.52f);
         rockMaterial.SetFloat("_Glossiness", 0.08f);
 
         if (!menu)
         {
-            // Scorched wreckage: hot glowing edges.
+            // Keep the wreckage legible against the warm results sky without turning whole
+            // foreground rocks into bright orange blobs over the results panel.
             emberRockMaterial = Own(new Material(standard));
             emberRockMaterial.mainTexture = ProceduralRockMeshes.RockTexture();
-            emberRockMaterial.color = new Color(0.22f, 0.16f, 0.15f);
+            emberRockMaterial.color = new Color(0.2f, 0.23f, 0.31f);
             emberRockMaterial.SetFloat("_Glossiness", 0.1f);
             emberRockMaterial.EnableKeyword("_EMISSION");
-            emberRockMaterial.SetColor("_EmissionColor", new Color(0.9f, 0.25f, 0.05f));
+            emberRockMaterial.SetColor("_EmissionColor", new Color(0.12f, 0.035f, 0.012f));
         }
 
         var random = new System.Random(menu ? 31 : 77);
@@ -407,7 +408,9 @@ public sealed class CosmosBackdrop : MonoBehaviour
             var renderer = go.AddComponent<MeshRenderer>();
             renderer.sharedMaterial = emberRockMaterial && i % 3 == 0 ? emberRockMaterial : rockMaterial;
             renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            go.transform.localScale = Vector3.one * Mathf.Lerp(0.8f, 3.4f, (float)random.NextDouble());
+            float minRockScale = menu ? 0.8f : 0.55f;
+            float maxRockScale = menu ? 3.4f : 1.35f;
+            go.transform.localScale = Vector3.one * Mathf.Lerp(minRockScale, maxRockScale, (float)random.NextDouble());
             go.transform.rotation = Random.rotation;
 
             var rock = new Rock
@@ -416,7 +419,7 @@ public sealed class CosmosBackdrop : MonoBehaviour
                 Spin = new Vector3((float)random.NextDouble() - 0.5f, (float)random.NextDouble() - 0.5f, (float)random.NextDouble() - 0.5f) * 70f,
                 Speed = menu ? Mathf.Lerp(5f, 11f, (float)random.NextDouble()) : Mathf.Lerp(0.6f, 1.6f, (float)random.NextDouble()),
             };
-            ResetRock(rock, random, Mathf.Lerp(8f, 70f, i / (float)(RockCount - 1)));
+            ResetRock(rock, random, Mathf.Lerp(menu ? 8f : 18f, 70f, i / (float)(RockCount - 1)));
             rocks.Add(rock);
         }
     }

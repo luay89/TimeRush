@@ -57,10 +57,16 @@ public class MenuHubUI : MonoBehaviour
     private static readonly Color PanelGlass = new Color(0.03f, 0.045f, 0.11f, 0.97f);
 
     private VisualElement root;
+    private VisualElement frame;
+    private VisualElement titleBlock;
+    private VisualElement controlDeck;
+    private VisualElement navigationRow;
+    private Label summaryLabel;
     private Label titleLabel;
     private Label eyebrowLabel;
     private Button launchButton;
     private Button stagesButton;
+    private Button dailyMissionsButton;
     private Label hangarName;
     private Label hangarStatus;
     private VisualElement hangarSwatch;
@@ -78,7 +84,7 @@ public class MenuHubUI : MonoBehaviour
         root.style.alignItems = Align.Center;
 
         // Padding lives on the frame (not the root) so full-screen panels can cover edge to edge.
-        var frame = new VisualElement();
+        frame = new VisualElement();
         frame.style.width = new Length(100f, LengthUnit.Percent);
         frame.style.maxWidth = FrameMaxWidth + 36f;
         frame.style.flexGrow = 1f;
@@ -99,7 +105,30 @@ public class MenuHubUI : MonoBehaviour
         frame.Add(window);
 
         frame.Add(BuildControlDeck());
+        root.RegisterCallback<GeometryChangedEvent>(OnRootGeometryChanged);
         StartAnimations();
+    }
+
+    private void OnRootGeometryChanged(GeometryChangedEvent evt)
+    {
+        bool compact = evt.newRect.height < 800f;
+        frame.style.paddingTop = compact ? 12f : 26f;
+        frame.style.paddingBottom = compact ? 12f : 20f;
+        titleBlock.style.marginTop = compact ? 14f : 28f;
+        titleLabel.style.fontSize = compact ? 54f : 68f;
+        eyebrowLabel.style.fontSize = compact ? 10f : 12f;
+        summaryLabel.style.display = compact ? DisplayStyle.None : DisplayStyle.Flex;
+        controlDeck.style.paddingTop = compact ? 10f : 14f;
+        controlDeck.style.paddingBottom = compact ? 10f : 14f;
+        launchButton.style.height = compact ? 58f : 70f;
+        launchButton.style.marginTop = compact ? 8f : 14f;
+        if (navigationRow != null)
+        {
+            foreach (VisualElement child in navigationRow.Children())
+            {
+                child.style.height = compact ? 38f : 44f;
+            }
+        }
     }
 
     private void Update()
@@ -169,7 +198,8 @@ public class MenuHubUI : MonoBehaviour
 
     private VisualElement BuildTitle()
     {
-        var block = new VisualElement();
+        titleBlock = new VisualElement();
+        var block = titleBlock;
         block.style.alignItems = Align.Center;
         block.style.marginTop = 28f;
         block.style.flexShrink = 0f;
@@ -204,20 +234,13 @@ public class MenuHubUI : MonoBehaviour
         edition.style.textShadow = new TextShadow { offset = Vector2.zero, blurRadius = 8f, color = new Color(Orange.r, Orange.g, Orange.b, 0.8f) };
         block.Add(edition);
 
-        var tagline = new Label("Dodge the warships, blast them with your laser, grab shields. Red ring under a ship = it will hit you.");
-        tagline.style.color = Muted;
-        tagline.style.fontSize = 13f;
-        tagline.style.unityTextAlign = TextAnchor.MiddleCenter;
-        tagline.style.whiteSpace = WhiteSpace.Normal;
-        tagline.style.marginTop = 12f;
-        tagline.style.maxWidth = 460f;
-        block.Add(tagline);
         return block;
     }
 
     private VisualElement BuildControlDeck()
     {
-        var deck = new VisualElement();
+        controlDeck = new VisualElement();
+        var deck = controlDeck;
         deck.style.flexShrink = 0f;
         deck.style.backgroundColor = Glass;
         StyleBorder(deck, 1.5f, new Color(Violet.r, Violet.g, Violet.b, 0.7f));
@@ -229,7 +252,15 @@ public class MenuHubUI : MonoBehaviour
 
         deck.Add(BuildHangar());
 
-        launchButton = new Button(() => StartRun(-1)) { text = "LAUNCH" };
+        summaryLabel = new Label("DODGE WARSHIPS  •  FIRE LASERS  •  GRAB SHIELDS");
+        summaryLabel.style.color = Muted;
+        summaryLabel.style.fontSize = 10f;
+        summaryLabel.style.letterSpacing = 0.6f;
+        summaryLabel.style.unityTextAlign = TextAnchor.MiddleCenter;
+        summaryLabel.style.marginTop = 10f;
+        deck.Add(summaryLabel);
+
+        launchButton = new Button(() => StartRun(-1, CombatGameMode.Campaign)) { text = "CAMPAIGN" };
         launchButton.style.height = 70f;
         launchButton.style.marginTop = 14f;
         launchButton.style.backgroundColor = Orange;
@@ -243,7 +274,7 @@ public class MenuHubUI : MonoBehaviour
         launchButton.style.textShadow = new TextShadow { offset = new Vector2(0f, 2f), blurRadius = 6f, color = new Color(0.4f, 0.05f, 0f, 0.8f) };
         deck.Add(launchButton);
 
-        var modeHint = new Label("ENDLESS RUN  •  HOW FAR CAN YOU GO?");
+        var modeHint = new Label("ELIMINATE HOSTILES  •  DEFEAT THE DREADNOUGHT");
         modeHint.style.color = Muted;
         modeHint.style.fontSize = 10f;
         modeHint.style.letterSpacing = 1.5f;
@@ -251,7 +282,17 @@ public class MenuHubUI : MonoBehaviour
         modeHint.style.marginTop = 5f;
         deck.Add(modeHint);
 
-        var nav = new VisualElement();
+        var combatModes = new VisualElement();
+        combatModes.style.flexDirection = FlexDirection.Row;
+        combatModes.style.marginTop = 8f;
+        deck.Add(combatModes);
+        var survivalButton = CreateNavButton("SURVIVAL", Cyan, () => StartRun(-1, CombatGameMode.Survival));
+        var bossButton = CreateNavButton("BOSS BATTLE", Orange, () => StartRun(-1, CombatGameMode.BossBattle));
+        combatModes.Add(survivalButton);
+        combatModes.Add(bossButton);
+
+        navigationRow = new VisualElement();
+        var nav = navigationRow;
         nav.style.flexDirection = FlexDirection.Row;
         nav.style.marginTop = 12f;
         deck.Add(nav);
@@ -259,6 +300,8 @@ public class MenuHubUI : MonoBehaviour
         StageProgressModel stages = StageProgress.Load();
         stagesButton = CreateNavButton($"STAGES  {stages.TotalStars}/{stages.MaxTotalStars}", Mint, ShowStages);
         nav.Add(stagesButton);
+        dailyMissionsButton = CreateNavButton("DAILY OPS", Gold, ShowDailyMissions);
+        nav.Add(dailyMissionsButton);
         nav.Add(CreateNavButton("SETTINGS", Cyan, ShowSettings));
         nav.Add(CreateNavButton("HOW TO PLAY", Cyan, ShowHelp));
         return deck;
@@ -433,6 +476,7 @@ public class MenuHubUI : MonoBehaviour
         switch (panel)
         {
             case "stages": ShowStages(); break;
+            case "daily": ShowDailyMissions(); break;
             case "settings": ShowSettings(); break;
             case "help": ShowHelp(); break;
             case "credits": ShowCredits(); break;
@@ -549,6 +593,101 @@ public class MenuHubUI : MonoBehaviour
         {
             grid.Add(CreateStageTile(i, progress));
         }
+    }
+
+    private void ShowDailyMissions()
+    {
+        VisualElement body = OpenPanel("DAILY OPS", Gold);
+        DailyMissions.MissionStatus[] missions = DailyMissions.GetStatuses();
+
+        var intro = Paragraph("Complete today's missions for bonus coins. Progress is saved between runs.", Muted, 12f);
+        intro.style.marginBottom = 8f;
+        body.Add(intro);
+
+        int completedCount = 0;
+        for (int i = 0; i < missions.Length; i++)
+        {
+            DailyMissions.MissionStatus mission = missions[i];
+            completedCount += mission.Completed ? 1 : 0;
+            body.Add(CreateDailyMissionCard(mission));
+        }
+
+        var summary = Paragraph($"{completedCount}/{missions.Length} COMPLETE   •   COINS {PlayerWallet.Balance}", Gold, 12f);
+        summary.style.unityFontStyleAndWeight = FontStyle.Bold;
+        summary.style.marginTop = 8f;
+        summary.style.unityTextAlign = TextAnchor.MiddleCenter;
+        body.Add(summary);
+
+        var launch = CreateNavButton("LAUNCH A RUN", Orange, () =>
+        {
+            ClosePanels();
+            StartRun(-1);
+        });
+        launch.style.height = 48f;
+        launch.style.marginTop = 10f;
+        body.Add(launch);
+    }
+
+    private static VisualElement CreateDailyMissionCard(DailyMissions.MissionStatus mission)
+    {
+        var card = new VisualElement();
+        card.style.marginTop = 5f;
+        card.style.marginBottom = 5f;
+        card.style.paddingLeft = 12f;
+        card.style.paddingRight = 12f;
+        card.style.paddingTop = 9f;
+        card.style.paddingBottom = 9f;
+        card.style.backgroundColor = new Color(Gold.r, Gold.g, Gold.b, 0.07f);
+        StyleBorder(card, 1f, new Color(Gold.r, Gold.g, Gold.b, 0.3f));
+        StyleRadius(card, 12f);
+
+        var heading = new VisualElement();
+        heading.style.flexDirection = FlexDirection.Row;
+        heading.style.justifyContent = Justify.SpaceBetween;
+        heading.style.alignItems = Align.Center;
+        card.Add(heading);
+
+        var title = new Label(mission.Title);
+        title.style.flexGrow = 1f;
+        title.style.color = Color.white;
+        title.style.fontSize = 12f;
+        title.style.whiteSpace = WhiteSpace.Normal;
+        title.style.unityFontStyleAndWeight = FontStyle.Bold;
+        heading.Add(title);
+
+        var reward = new Label(mission.Completed ? "PAID" : $"+{mission.RewardCoins} COINS");
+        reward.style.color = mission.Completed ? Mint : Gold;
+        reward.style.fontSize = 10f;
+        reward.style.unityFontStyleAndWeight = FontStyle.Bold;
+        reward.style.marginLeft = 8f;
+        heading.Add(reward);
+
+        var progressRow = new VisualElement();
+        progressRow.style.flexDirection = FlexDirection.Row;
+        progressRow.style.alignItems = Align.Center;
+        progressRow.style.marginTop = 7f;
+        card.Add(progressRow);
+
+        var track = new VisualElement();
+        track.style.height = 5f;
+        track.style.flexGrow = 1f;
+        track.style.backgroundColor = new Color(1f, 1f, 1f, 0.12f);
+        StyleRadius(track, 3f);
+        progressRow.Add(track);
+
+        var fill = new VisualElement();
+        fill.style.height = new Length(100f, LengthUnit.Percent);
+        fill.style.width = new Length(mission.Target > 0 ? Mathf.Clamp01(mission.Progress / (float)mission.Target) * 100f : 0f, LengthUnit.Percent);
+        fill.style.backgroundColor = mission.Completed ? Mint : Gold;
+        StyleRadius(fill, 3f);
+        track.Add(fill);
+
+        var value = new Label($"{mission.Progress}/{mission.Target}");
+        value.style.color = Muted;
+        value.style.fontSize = 10f;
+        value.style.marginLeft = 8f;
+        progressRow.Add(value);
+        return card;
     }
 
     private VisualElement CreateStageTile(int index, StageProgressModel progress)
@@ -918,18 +1057,30 @@ public class MenuHubUI : MonoBehaviour
     /// <param name="stageIndex">-1 for the endless run, otherwise the stage to play.</param>
     private void StartRun(int stageIndex)
     {
+        StartRun(stageIndex, stageIndex >= 0 ? CombatGameMode.Stage : CombatGameMode.Survival);
+    }
+
+    private void StartRun(int stageIndex, CombatGameMode mode)
+    {
         if (startRequestInProgress)
         {
             return;
         }
 
-        if (stageIndex >= 0)
+        switch (mode)
         {
-            StageSession.SelectStage(stageIndex);
-        }
-        else
-        {
-            StageSession.SelectEndless();
+            case CombatGameMode.Campaign:
+                CombatGameModeSession.BeginCampaign();
+                break;
+            case CombatGameMode.BossBattle:
+                CombatGameModeSession.BeginBossBattle();
+                break;
+            case CombatGameMode.Stage:
+                CombatGameModeSession.BeginStage(stageIndex);
+                break;
+            default:
+                CombatGameModeSession.BeginSurvival();
+                break;
         }
 
         GameAudio.Confirm();
@@ -966,7 +1117,7 @@ public class MenuHubUI : MonoBehaviour
                 startRequestInProgress = false;
                 if (launchButton != null)
                 {
-                    launchButton.text = "LAUNCH";
+                    launchButton.text = "CAMPAIGN";
                     launchButton.SetEnabled(true);
                 }
             }

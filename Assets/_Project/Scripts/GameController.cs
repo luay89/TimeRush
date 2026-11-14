@@ -29,6 +29,8 @@ public class GameController : MonoBehaviour
     [Header("Difficulty")]
     [SerializeField] private GameBalanceConfig gameBalanceConfig;
 
+    public GameBalanceConfig BalanceConfig => gameBalanceConfig;
+
     [Header("Continue Settings")]
     [SerializeField, Tooltip("Seconds of invulnerability granted after a continue respawn.")]
     private float continueInvulnerabilitySeconds = 1f;
@@ -46,6 +48,7 @@ public class GameController : MonoBehaviour
     public bool HasContinuedThisRun => hasContinuedThisRun;
     public bool IsPlayerInvulnerable => invulnerabilityTimer > 0f;
     public float InvulnerabilityRemaining => invulnerabilityTimer;
+    public bool StageGoalReached => stageGoalReached;
 
     /// <summary>
     /// Extends player invulnerability by at least the given duration (never shortens an
@@ -87,6 +90,7 @@ public class GameController : MonoBehaviour
     private float difficultyEaseTimer;
     private float flowTimer;
     private TextMeshProUGUI scoreText;
+    private bool stageGoalReached;
 
     private void Awake()
     {
@@ -147,12 +151,32 @@ public class GameController : MonoBehaviour
         aliveTime += Time.deltaTime;
         if (StageSession.IsStageRun && aliveTime >= StageSession.Current.GoalSeconds)
         {
-            CompleteStage();
-            return;
+            // Legacy runner stages auto-clear once the finish line time is reached.
+            // Space-combat missions may need additional completion conditions (boss defeated,
+            // last wave cleared), so the CombatMissionController decides when to call
+            // RequestStageClear().
+            if (gameBalanceConfig && gameBalanceConfig.enableSpaceCombat)
+            {
+                stageGoalReached = true;
+            }
+            else
+            {
+                CompleteStage();
+                return;
+            }
         }
 
         TickScoreTimers();
         TickDifficultyDebug();
+    }
+
+    /// <summary>
+    /// Space-combat missions can call this once their win conditions are satisfied.
+    /// Runner gameplay continues to auto-clear via the stage timer.
+    /// </summary>
+    public void RequestStageClear()
+    {
+        CompleteStage();
     }
 
     private void InitializeRunState()
@@ -369,7 +393,14 @@ public class GameController : MonoBehaviour
         // A cleared stage can't be "continued": record it as already continued so Results hides it.
         RecordFinishedRun(RunLossReason.None, true);
 
-        CombatAnnouncer.Announce("STAGE CLEAR", $"STAGE {StageSession.Current.Number}  //  {StageSession.LastStars} / {StageCatalog.MaxStars} STARS", new Color(0.3f, 1f, 0.75f, 1f), -1);
+        if (CombatGameModeSession.Mode == CombatGameMode.BossBattle)
+        {
+            CombatAnnouncer.Announce("BOSS DEFEATED", "LEVIATHAN DESTROYED  //  MISSION COMPLETE", new Color(0.3f, 1f, 0.75f, 1f), -1);
+        }
+        else
+        {
+            CombatAnnouncer.Announce("STAGE CLEAR", $"STAGE {StageSession.Current.Number}  //  {StageSession.LastStars} / {StageCatalog.MaxStars} STARS", new Color(0.3f, 1f, 0.75f, 1f), -1);
+        }
         GameAudio.Confirm();
         StartCoroutine(ShowResultsAfter(1.4f));
     }

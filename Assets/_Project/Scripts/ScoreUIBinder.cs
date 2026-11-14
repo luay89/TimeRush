@@ -141,6 +141,17 @@ public class ScoreUIBinder : MonoBehaviour
         zoneAnnounceLabel = zoneAnnounceLabel ? zoneAnnounceLabel : CreateLabel("ZoneAnnounceLabel");
         depthGaugeLabel = depthGaugeLabel ? depthGaugeLabel : CreateLabel("DepthGaugeLabel");
 
+        if (FindObjectOfType<CombatMissionController>())
+        {
+            foreach (TextMeshProUGUI label in new[] { scoreLabel, bestLabel, survivalTimeLabel, statusLabel, paceLabel, flowLabel, zoneAnnounceLabel, depthGaugeLabel })
+            {
+                if (label)
+                {
+                    label.gameObject.SetActive(false);
+                }
+            }
+        }
+
         ApplyLayout(IsPortrait());
         zoneAnnounceLabel?.SetText(string.Empty);
     }

@@ -325,6 +325,14 @@ public class ObstacleSpawner : MonoBehaviour
         {
             obstacleInstance.AddComponent<KillOnHit>();
         }
+
+        // Hazards are resolved by KillOnHit, not by rigidbody impulses. Trigger contacts let an
+        // active shield absorb the hit without the obstacle physically shoving the player ship.
+        var obstacleCollider = obstacleInstance.GetComponent<Collider>();
+        if (obstacleCollider)
+        {
+            obstacleCollider.isTrigger = true;
+        }
     }
 
     private void ApplyConfiguration()

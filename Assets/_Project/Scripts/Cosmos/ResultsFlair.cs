@@ -132,7 +132,17 @@ public sealed class ResultsFlair : MonoBehaviour
 
         titleText = newRecord ? "NEW RECORD!" : "SHIP DESTROYED";
         titleColor = newRecord ? new Color(1f, 0.82f, 0.25f, 1f) : new Color(1f, 0.32f, 0.38f, 1f);
-        if (StageSession.HasLastResult)
+        bool bossBattleWon = CombatGameModeSession.Mode == CombatGameMode.BossBattle
+            && CombatGameModeSession.BossBattleCompleted;
+        if (bossBattleWon)
+        {
+            titleText = "MISSION COMPLETE";
+            titleColor = new Color(0.3f, 1f, 0.72f, 1f);
+            title.enableAutoSizing = true;
+            title.fontSizeMin = 40f;
+            title.fontSizeMax = title.fontSize;
+        }
+        else if (StageSession.HasLastResult)
         {
             int number = StageSession.LastIndex + 1;
             titleText = StageSession.LastCleared ? $"STAGE {number} CLEAR" : $"STAGE {number} FAILED";
@@ -147,7 +157,7 @@ public sealed class ResultsFlair : MonoBehaviour
         title.fontStyle = FontStyles.Bold | FontStyles.Italic;
         title.characterSpacing = 6f;
         title.outlineWidth = 0.18f;
-        title.outlineColor = newRecord ? new Color32(90, 40, 0, 255) : new Color32(40, 0, 20, 255);
+        title.outlineColor = newRecord || bossBattleWon ? new Color32(90, 40, 0, 255) : new Color32(40, 0, 20, 255);
         titleBasePosition = title.rectTransform.anchoredPosition;
         nextGlitch = Time.unscaledTime + 0.4f;
     }
