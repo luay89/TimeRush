@@ -1,11 +1,11 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// Adds small procedural cosmetic add-ons around the player ship's own imported model --
-/// blinking wingtip navigation beacons, a glowing cockpit dome accent, and pulsing engine side
-/// strips -- so the ship silhouette reads as a real detailed spacecraft instead of a single
-/// plain-colored hull. Purely cosmetic: no colliders, never read by gameplay/fairness, and built
-/// once in Awake() the same way ShipThruster already adds itself onto the "Visual" holder.
+/// Adds a swept armored wing, paired cannons, engine nacelles, and cosmetic lighting around the
+/// player's imported hull so it reads as a fighter rather than a plain speeder. These details are
+/// purely cosmetic: they have no colliders, are never read by gameplay/fairness, and are built
+/// once in Awake() on the same "Visual" holder as ShipThruster.
 /// Uses the currently selected ship skin's accent color so every add-on always matches whatever
 /// hull the player has equipped.
 /// </summary>
@@ -17,7 +17,9 @@ public sealed class ShipDetailing : MonoBehaviour
     private Material beaconMaterial;
     private Material cockpitMaterial;
     private Material engineGlowMaterial;
+    private Material engineCasingMaterial;
     private Color accentColor;
+    private Mesh wingArmorMesh;
 
     private void Awake()
     {
@@ -30,24 +32,32 @@ public sealed class ShipDetailing : MonoBehaviour
         BuildEngineGlowStrips();
     }
 
-    // The 3 materials built above are runtime "new Material(...)" instances -- Unity does not free
+    // These materials are runtime "new Material(...)" instances -- Unity does not free
     // those automatically when this GameObject is destroyed, so without this every ship
-    // respawn/skin change would leak 3 small materials for the rest of the process's lifetime.
+    // respawn/skin change would leak them for the rest of the process's lifetime.
     private void OnDestroy()
     {
-        if (cockpitMaterial)
+        DestroyOwned(cockpitMaterial);
+        DestroyOwned(beaconMaterial);
+        DestroyOwned(engineGlowMaterial);
+        DestroyOwned(engineCasingMaterial);
+        DestroyOwned(wingArmorMesh);
+    }
+
+    private static void DestroyOwned(Object asset)
+    {
+        if (!asset)
         {
-            Destroy(cockpitMaterial);
+            return;
         }
 
-        if (beaconMaterial)
+        if (Application.isPlaying)
         {
-            Destroy(beaconMaterial);
+            Destroy(asset);
         }
-
-        if (engineGlowMaterial)
+        else
         {
-            Destroy(engineGlowMaterial);
+            DestroyImmediate(asset);
         }
     }
 
@@ -91,7 +101,7 @@ public sealed class ShipDetailing : MonoBehaviour
         var collider = go.GetComponent<Collider>();
         if (collider)
         {
-            Destroy(collider);
+            DestroyImmediate(collider);
         }
 
         var renderer = go.GetComponent<Renderer>();
@@ -107,8 +117,8 @@ public sealed class ShipDetailing : MonoBehaviour
     // an actual transparent-glass shader/material.
     private void BuildCockpitGlow()
     {
-        cockpitMaterial = CreateEmissiveAccent(accentColor, 1.4f);
-        CreateCosmeticPrimitive("CockpitGlow", transform, PrimitiveType.Sphere, new Vector3(0f, 0.14f, 0.32f), new Vector3(0.22f, 0.14f, 0.28f), cockpitMaterial);
+        cockpitMaterial = CreateEmissiveAccent(accentColor, 0.75f);
+        CreateCosmeticPrimitive("CockpitGlow", transform, PrimitiveType.Sphere, new Vector3(0f, 0.14f, 0.32f), new Vector3(0.18f, 0.11f, 0.25f), cockpitMaterial);
     }
 
     // A pair of small blinking beacons on either side of the hull -- the classic
@@ -127,5 +137,124 @@ public sealed class ShipDetailing : MonoBehaviour
         engineGlowMaterial = CreateEmissiveAccent(accentColor, 1.2f);
         CreateCosmeticPrimitive("EngineGlowLeft", transform, PrimitiveType.Cube, new Vector3(-0.2f, 0f, -0.4f), new Vector3(0.05f, 0.05f, 0.35f), engineGlowMaterial);
         CreateCosmeticPrimitive("EngineGlowRight", transform, PrimitiveType.Cube, new Vector3(0.2f, 0f, -0.4f), new Vector3(0.05f, 0.05f, 0.35f), engineGlowMaterial);
+
+        engineCasingMaterial = new Material(Shader.Find("Standard"))
+        {
+            name = "PlayerEngineCasing",
+            color = new Color(0.12f, 0.16f, 0.22f)
+        };
+        engineCasingMaterial.SetFloat("_Metallic", 0.72f);
+        engineCasingMaterial.SetFloat("_Glossiness", 0.58f);
+
+        BuildSweptWings();
+        BuildForwardCannons();
+
+        for (int side = -1; side <= 1; side += 2)
+        {
+            CreateCosmeticPrimitive(
+                "EngineNacelle", transform, PrimitiveType.Cylinder,
+                new Vector3(side * 0.19f, -0.015f, -0.43f),
+                new Vector3(0.105f, 0.09f, 0.18f),
+                engineCasingMaterial).transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            CreateCosmeticPrimitive(
+                "EngineExhaust", transform, PrimitiveType.Cylinder,
+                new Vector3(side * 0.19f, -0.015f, -0.58f),
+                new Vector3(0.065f, 0.065f, 0.025f),
+                engineGlowMaterial).transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            CreateCosmeticPrimitive(
+                "WingArmorPanel", transform, PrimitiveType.Cube,
+                new Vector3(side * 0.3f, 0.045f, -0.12f),
+                new Vector3(0.16f, 0.018f, 0.24f),
+                engineCasingMaterial).transform.localRotation = Quaternion.Euler(0f, side * -12f, 0f);
+            CreateCosmeticPrimitive(
+                "WingSignalStrip", transform, PrimitiveType.Cube,
+                new Vector3(side * 0.3f, 0.058f, -0.12f),
+                new Vector3(0.035f, 0.008f, 0.16f),
+                engineGlowMaterial).transform.localRotation = Quaternion.Euler(0f, side * -12f, 0f);
+            CreateCosmeticPrimitive(
+                "WingtipFin", transform, PrimitiveType.Cube,
+                new Vector3(side * 0.67f, 0.11f, -0.17f),
+                new Vector3(0.075f, 0.19f, 0.2f),
+                engineCasingMaterial).transform.localRotation = Quaternion.Euler(0f, side * -12f, side * -8f);
+        }
+    }
+
+    private void BuildSweptWings()
+    {
+        var vertices = new List<Vector3>(16);
+        var triangles = new List<int>(48);
+        AddWing(vertices, triangles, -1);
+        AddWing(vertices, triangles, 1);
+
+        wingArmorMesh = new Mesh { name = "PlayerSweptArmorWings" };
+        wingArmorMesh.SetVertices(vertices);
+        wingArmorMesh.SetTriangles(triangles, 0);
+        wingArmorMesh.RecalculateNormals();
+
+        var wings = new GameObject("SweptArmorWings");
+        wings.transform.SetParent(transform, false);
+        wings.AddComponent<MeshFilter>().sharedMesh = wingArmorMesh;
+        var renderer = wings.AddComponent<MeshRenderer>();
+        renderer.sharedMaterial = engineCasingMaterial;
+        renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        renderer.receiveShadows = false;
+    }
+
+    private static void AddWing(List<Vector3> vertices, List<int> triangles, int side)
+    {
+        int first = vertices.Count;
+        vertices.Add(new Vector3(side * 0.16f, 0.035f, 0.16f));
+        vertices.Add(new Vector3(side * 0.78f, 0.025f, -0.015f));
+        vertices.Add(new Vector3(side * 0.61f, 0.02f, -0.29f));
+        vertices.Add(new Vector3(side * 0.19f, 0.045f, -0.36f));
+        vertices.Add(new Vector3(side * 0.16f, 0.005f, 0.16f));
+        vertices.Add(new Vector3(side * 0.78f, 0.005f, -0.015f));
+        vertices.Add(new Vector3(side * 0.61f, 0.005f, -0.29f));
+        vertices.Add(new Vector3(side * 0.19f, 0.005f, -0.36f));
+
+        if (side > 0)
+        {
+            triangles.AddRange(new[]
+            {
+                first, first + 1, first + 2, first, first + 2, first + 3,
+                first + 4, first + 6, first + 5, first + 4, first + 7, first + 6
+            });
+        }
+        else
+        {
+            triangles.AddRange(new[]
+            {
+                first, first + 2, first + 1, first, first + 3, first + 2,
+                first + 4, first + 5, first + 6, first + 4, first + 6, first + 7
+            });
+        }
+
+        for (int edge = 0; edge < 4; edge++)
+        {
+            int next = (edge + 1) % 4;
+            triangles.Add(first + edge);
+            triangles.Add(first + next);
+            triangles.Add(first + next + 4);
+            triangles.Add(first + edge);
+            triangles.Add(first + next + 4);
+            triangles.Add(first + edge + 4);
+        }
+    }
+
+    private void BuildForwardCannons()
+    {
+        for (int side = -1; side <= 1; side += 2)
+        {
+            CreateCosmeticPrimitive(
+                "ForwardCannon", transform, PrimitiveType.Cylinder,
+                new Vector3(side * 0.45f, 0.055f, 0.18f),
+                new Vector3(0.045f, 0.15f, 0.045f),
+                engineCasingMaterial).transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            CreateCosmeticPrimitive(
+                "CannonMuzzle", transform, PrimitiveType.Sphere,
+                new Vector3(side * 0.45f, 0.055f, 0.34f),
+                Vector3.one * 0.065f,
+                engineGlowMaterial);
+        }
     }
 }

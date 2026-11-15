@@ -4,7 +4,8 @@ using UnityEngine.UIElements;
 
 /// <summary>
 /// Builds the lightweight TimeRush menu at runtime while preserving the existing
-/// MenuHub -> Game scene contract.
+/// MenuHub -> Game scene contract. Besides the hangar and LAUNCH (endless run) it hosts the
+/// Stages, Settings, How to Play and Credits panels, and asks before quitting on Back/Escape.
 /// </summary>
 public class MenuHubUI : MonoBehaviour
 {
@@ -13,24 +14,17 @@ public class MenuHubUI : MonoBehaviour
     private const string BestScoreKey = "BEST_SCORE";
 
     private static readonly Color Ink = new Color(0.015f, 0.025f, 0.075f, 1f);
-    private static readonly Color Panel = new Color(0.035f, 0.055f, 0.12f, 0.96f);
     private static readonly Color Cyan = new Color(0.12f, 0.95f, 1f, 1f);
     private static readonly Color Orange = new Color(1f, 0.36f, 0.12f, 1f);
     private static readonly Color Violet = new Color(0.56f, 0.34f, 1f, 1f);
     private static readonly Color Muted = new Color(0.62f, 0.7f, 0.86f, 1f);
+    private static readonly Color Mint = new Color(0.3f, 1f, 0.72f, 1f);
     private bool startRequestInProgress;
 
-    private bool cameraShakeEnabled;
-    private bool reduceFlashingEnabled;
-    private bool audioEnabled;
     private ProgressionConfig progressionConfig;
 
     private void Awake()
     {
-        cameraShakeEnabled = FeedbackPreferences.IsCameraShakeEnabled(feedbackConfig);
-        reduceFlashingEnabled = FeedbackPreferences.IsReduceFlashingEnabled(feedbackConfig);
-        audioEnabled = FeedbackPreferences.IsAudioEnabled(feedbackConfig);
-
         progressionConfig = Resources.Load<ProgressionConfig>("ProgressionConfig");
         if (!progressionConfig)
         {
@@ -51,337 +45,1141 @@ public class MenuHubUI : MonoBehaviour
         BuildUI(document);
     }
 
-    // Layout below is written portrait-first: the shared DefaultPanelSettings asset now scales
-    // by matching screen HEIGHT (see its m_Match/m_ReferenceResolution), so the panel's virtual
-    // width tracks the device's real aspect ratio instead of assuming a fixed landscape canvas.
-    // Every block here therefore sizes itself in percentages / flex, with only a single portrait
-    // -oriented maxWidth cap on the frame -- so it fits phone screens narrow or wide without a
-    // separate "compact" branch, and still looks fine in the wider editor Game view.
+    // Layout below is written portrait-first: the shared DefaultPanelSettings asset scales by
+    // matching screen HEIGHT, so the panel's virtual width tracks the device's real aspect ratio.
+    // The root is transparent: CosmosBackdrop renders the living universe (and the hovering ship)
+    // behind it, so the page is laid out as title on top, an open window in the middle where the
+    // ship floats, and the controls in a glass panel at the bottom.
     private const float FrameMaxWidth = 640f;
+
+    private static readonly Color Gold = new Color(1f, 0.82f, 0.3f, 1f);
+    private static readonly Color Glass = new Color(0.03f, 0.04f, 0.1f, 0.62f);
+    private static readonly Color PanelGlass = new Color(0.03f, 0.045f, 0.11f, 0.97f);
+
+    private VisualElement root;
+    private VisualElement frame;
+    private VisualElement titleBlock;
+    private VisualElement controlDeck;
+    private VisualElement navigationRow;
+    private Label summaryLabel;
+    private Label titleLabel;
+    private Label eyebrowLabel;
+    private Button launchButton;
+    private Button stagesButton;
+    private Button dailyMissionsButton;
+    private Label hangarName;
+    private Label hangarStatus;
+    private VisualElement hangarSwatch;
+    private Button hangarBuyButton;
+    private Label coinsLabel;
+    private int hangarIndex;
+    private VisualElement openPanel;
 
     private void BuildUI(UIDocument document)
     {
-        var root = document.rootVisualElement;
+        root = document.rootVisualElement;
         root.Clear();
         root.style.flexGrow = 1f;
-        root.style.backgroundColor = Ink;
-        root.style.paddingLeft = 24f;
-        root.style.paddingRight = 24f;
-        root.style.paddingTop = 36f;
-        root.style.paddingBottom = 28f;
+        root.style.backgroundColor = Color.clear;
         root.style.alignItems = Align.Center;
-        root.style.justifyContent = Justify.Center;
 
-        var frame = new VisualElement();
+        // Padding lives on the frame (not the root) so full-screen panels can cover edge to edge.
+        frame = new VisualElement();
         frame.style.width = new Length(100f, LengthUnit.Percent);
-        frame.style.maxWidth = FrameMaxWidth;
-        // Fills the available portrait height (instead of a fixed landscape-tuned minHeight),
-        // so the menu reads as a proper full-screen mobile page rather than a small floating box.
+        frame.style.maxWidth = FrameMaxWidth + 36f;
         frame.style.flexGrow = 1f;
-        frame.style.backgroundColor = Panel;
-        frame.style.borderLeftWidth = 2f;
-        frame.style.borderRightWidth = 2f;
-        frame.style.borderTopWidth = 2f;
-        frame.style.borderBottomWidth = 2f;
-        frame.style.borderLeftColor = Violet;
-        frame.style.borderRightColor = Violet;
-        frame.style.borderTopColor = Violet;
-        frame.style.borderBottomColor = Violet;
-        frame.style.borderTopLeftRadius = 22f;
-        frame.style.borderTopRightRadius = 22f;
-        frame.style.borderBottomLeftRadius = 22f;
-        frame.style.borderBottomRightRadius = 22f;
-        frame.style.paddingLeft = 28f;
-        frame.style.paddingRight = 28f;
-        frame.style.paddingTop = 30f;
-        frame.style.paddingBottom = 24f;
-        frame.style.alignItems = Align.Stretch;
-        frame.style.justifyContent = Justify.FlexStart;
+        frame.style.flexDirection = FlexDirection.Column;
+        frame.style.paddingLeft = 18f;
+        frame.style.paddingRight = 18f;
+        frame.style.paddingTop = 26f;
+        frame.style.paddingBottom = 20f;
         root.Add(frame);
 
+        frame.Add(BuildHeader());
+        frame.Add(BuildTitle());
+
+        // The open window the hovering ship shows through.
+        var window = new VisualElement();
+        window.style.flexGrow = 1f;
+        window.style.minHeight = 120f;
+        frame.Add(window);
+
+        frame.Add(BuildControlDeck());
+        root.RegisterCallback<GeometryChangedEvent>(OnRootGeometryChanged);
+        StartAnimations();
+    }
+
+    private void OnRootGeometryChanged(GeometryChangedEvent evt)
+    {
+        bool compact = evt.newRect.height < 800f;
+        frame.style.paddingTop = compact ? 12f : 26f;
+        frame.style.paddingBottom = compact ? 12f : 20f;
+        titleBlock.style.marginTop = compact ? 14f : 28f;
+        titleLabel.style.fontSize = compact ? 54f : 68f;
+        eyebrowLabel.style.fontSize = compact ? 10f : 12f;
+        summaryLabel.style.display = compact ? DisplayStyle.None : DisplayStyle.Flex;
+        controlDeck.style.paddingTop = compact ? 10f : 14f;
+        controlDeck.style.paddingBottom = compact ? 10f : 14f;
+        launchButton.style.height = compact ? 58f : 70f;
+        launchButton.style.marginTop = compact ? 8f : 14f;
+        if (navigationRow != null)
+        {
+            foreach (VisualElement child in navigationRow.Children())
+            {
+                child.style.height = compact ? 38f : 44f;
+            }
+        }
+    }
+
+    private void Update()
+    {
+        // Android's Back button arrives as Escape: close the open panel, else ask before quitting.
+        if (Input.GetKeyDown(KeyCode.Escape))
+        {
+            if (openPanel != null)
+            {
+                ClosePanels();
+            }
+            else
+            {
+                ShowQuitConfirm();
+            }
+        }
+    }
+
+    private VisualElement BuildHeader()
+    {
         var header = new VisualElement();
-        header.style.width = new Length(100f, LengthUnit.Percent);
         header.style.flexDirection = FlexDirection.Row;
         header.style.justifyContent = Justify.SpaceBetween;
         header.style.alignItems = Align.Center;
         header.style.flexShrink = 0f;
-        frame.Add(header);
-
-        // Vertically centers the hero title, accessibility card, and CTA as one group in
-        // whatever space is left between the header and footer, instead of clustering them all
-        // at the top and leaving a large dead gap above the footer on tall phone screens.
-        var contentColumn = new VisualElement();
-        contentColumn.style.width = new Length(100f, LengthUnit.Percent);
-        contentColumn.style.flexGrow = 1f;
-        contentColumn.style.flexDirection = FlexDirection.Column;
-        contentColumn.style.justifyContent = Justify.Center;
-        contentColumn.style.alignItems = Align.Stretch;
-        contentColumn.style.flexShrink = 0f;
-        frame.Add(contentColumn);
-
-        var mark = new Label("TR");
-        mark.style.color = Cyan;
-        mark.style.fontSize = 20f;
-        mark.style.unityFontStyleAndWeight = FontStyle.Bold;
-        mark.style.letterSpacing = 3f;
-        header.Add(mark);
-
-        var headerInfo = new VisualElement();
-        headerInfo.style.flexDirection = FlexDirection.Column;
-        headerInfo.style.alignItems = Align.FlexEnd;
-        headerInfo.style.justifyContent = Justify.Center;
-        headerInfo.style.flexShrink = 1f;
-        headerInfo.style.maxWidth = new Length(70f, LengthUnit.Percent);
-        header.Add(headerInfo);
 
         int bestScore = PlayerPrefs.GetInt(BestScoreKey, 0);
         var progression = ProgressionProfile.Load();
         var rank = progressionConfig.ResolveRank(bestScore);
-        var meta = new Label($"{rank.name}   //   BEST {bestScore}   //   RUNS {progression.TotalRuns}");
-        meta.style.color = Muted;
-        meta.style.fontSize = 11f;
-        meta.style.unityTextAlign = TextAnchor.MiddleRight;
-        meta.style.whiteSpace = WhiteSpace.Normal;
-        headerInfo.Add(meta);
 
-        // Surface next-rank progress (or MAX RANK) as a single quiet line beneath the meta summary.
+        var rankChip = new Label($"RANK  {rank.name}");
+        rankChip.style.color = Cyan;
+        rankChip.style.fontSize = 12f;
+        rankChip.style.unityFontStyleAndWeight = FontStyle.Bold;
+        rankChip.style.letterSpacing = 1.5f;
+        rankChip.style.backgroundColor = new Color(Cyan.r, Cyan.g, Cyan.b, 0.12f);
+        StyleBorder(rankChip, 1f, new Color(Cyan.r, Cyan.g, Cyan.b, 0.55f));
+        StyleRadius(rankChip, 12f);
+        StylePadding(rankChip, 12f, 6f);
+        header.Add(rankChip);
+
+        var stats = new VisualElement();
+        stats.style.alignItems = Align.FlexEnd;
+        header.Add(stats);
+
+        var best = new Label($"BEST  {bestScore}   •   RUNS  {progression.TotalRuns}");
+        best.style.color = Color.white;
+        best.style.fontSize = 12f;
+        best.style.unityFontStyleAndWeight = FontStyle.Bold;
+        stats.Add(best);
+
         var rankProgress = RankProgression.Evaluate(progressionConfig, bestScore);
-        string rankProgressText = rankProgress.IsMaxRank
-            ? "MAX RANK"
-            : $"NEXT {rankProgress.NextRankName}   //   {rankProgress.PointsToNext} TO GO";
-        var rankProgressLabel = new Label(rankProgressText);
-        rankProgressLabel.style.color = Muted;
-        rankProgressLabel.style.fontSize = 10f;
-        rankProgressLabel.style.unityTextAlign = TextAnchor.MiddleRight;
-        rankProgressLabel.style.whiteSpace = WhiteSpace.Normal;
-        rankProgressLabel.style.marginTop = 2f;
-        headerInfo.Add(rankProgressLabel);
+        var next = new Label(rankProgress.IsMaxRank ? "MAX RANK" : $"NEXT  {rankProgress.NextRankName}  IN  {rankProgress.PointsToNext}");
+        next.style.color = Muted;
+        next.style.fontSize = 10f;
+        next.style.marginTop = 2f;
+        stats.Add(next);
 
-        var titleBlock = new VisualElement();
-        titleBlock.style.marginTop = 8f;
-        titleBlock.style.marginBottom = 0f;
-        titleBlock.style.width = new Length(100f, LengthUnit.Percent);
-        titleBlock.style.flexShrink = 0f;
-        contentColumn.Add(titleBlock);
-
-        var eyebrow = new Label("MOVE WITH THE CLOCK");
-        eyebrow.style.color = Orange;
-        eyebrow.style.fontSize = 13f;
-        eyebrow.style.unityFontStyleAndWeight = FontStyle.Bold;
-        eyebrow.style.letterSpacing = 2f;
-        titleBlock.Add(eyebrow);
-
-        var title = new Label("TIME RUSH");
-        title.style.color = Color.white;
-        title.style.fontSize = 54f;
-        title.style.unityFontStyleAndWeight = FontStyle.Bold;
-        title.style.unityTextAlign = TextAnchor.MiddleLeft;
-        title.style.letterSpacing = -0.5f;
-        title.style.whiteSpace = WhiteSpace.Normal;
-        title.style.marginTop = 6f;
-        title.style.marginBottom = 4f;
-        title.style.flexShrink = 0f;
-        titleBlock.Add(title);
-
-        var subtitle = new Label("Three lanes. Read the gap. Shift depth when the line closes.");
-        subtitle.style.color = Muted;
-        subtitle.style.fontSize = 15f;
-        subtitle.style.marginTop = 6f;
-        subtitle.style.whiteSpace = WhiteSpace.Normal;
-        subtitle.style.flexShrink = 0f;
-        titleBlock.Add(subtitle);
-
-        var settingsPanel = new VisualElement();
-        settingsPanel.style.width = new Length(100f, LengthUnit.Percent);
-        settingsPanel.style.marginTop = 20f;
-        settingsPanel.style.marginBottom = 20f;
-        settingsPanel.style.paddingLeft = 16f;
-        settingsPanel.style.paddingRight = 16f;
-        settingsPanel.style.paddingTop = 10f;
-        settingsPanel.style.paddingBottom = 8f;
-        settingsPanel.style.flexDirection = FlexDirection.Column;
-        settingsPanel.style.alignItems = Align.Stretch;
-        settingsPanel.style.flexShrink = 0f;
-        settingsPanel.style.backgroundColor = new Color(Cyan.r, Cyan.g, Cyan.b, 0.05f);
-        settingsPanel.style.borderLeftWidth = 1f;
-        settingsPanel.style.borderRightWidth = 1f;
-        settingsPanel.style.borderTopWidth = 1f;
-        settingsPanel.style.borderBottomWidth = 1f;
-        settingsPanel.style.borderLeftColor = new Color(Cyan.r, Cyan.g, Cyan.b, 0.4f);
-        settingsPanel.style.borderRightColor = new Color(Cyan.r, Cyan.g, Cyan.b, 0.4f);
-        settingsPanel.style.borderTopColor = new Color(Cyan.r, Cyan.g, Cyan.b, 0.4f);
-        settingsPanel.style.borderBottomColor = new Color(Cyan.r, Cyan.g, Cyan.b, 0.4f);
-        settingsPanel.style.borderTopLeftRadius = 14f;
-        settingsPanel.style.borderTopRightRadius = 14f;
-        settingsPanel.style.borderBottomLeftRadius = 14f;
-        settingsPanel.style.borderBottomRightRadius = 14f;
-        contentColumn.Add(settingsPanel);
-
-        var settingsHeader = new Label("ACCESSIBILITY");
-        settingsHeader.style.color = Cyan;
-        settingsHeader.style.fontSize = 12f;
-        settingsHeader.style.unityFontStyleAndWeight = FontStyle.Bold;
-        settingsHeader.style.letterSpacing = 1.5f;
-        settingsHeader.style.marginBottom = 4f;
-        settingsPanel.Add(settingsHeader);
-
-        settingsPanel.Add(CreateSettingRow(
-            "Camera Shake",
-            () => cameraShakeEnabled,
-            enabled =>
-            {
-                cameraShakeEnabled = enabled;
-                FeedbackPreferences.SetCameraShakeEnabled(enabled);
-            }));
-
-        settingsPanel.Add(CreateSettingRow(
-            "Reduce Flashing",
-            () => reduceFlashingEnabled,
-            enabled =>
-            {
-                reduceFlashingEnabled = enabled;
-                FeedbackPreferences.SetReduceFlashingEnabled(enabled);
-            }));
-
-        settingsPanel.Add(CreateSettingRow(
-            "Audio",
-            () => audioEnabled,
-            enabled =>
-            {
-                audioEnabled = enabled;
-                FeedbackPreferences.SetAudioEnabled(enabled);
-            }));
-
-        // A single full-width, thumb-friendly CTA stacked above the control hint -- rather than
-        // a side-by-side row -- so it never gets squeezed on narrow phone widths and matches how
-        // mobile game menus are normally laid out.
-        var actionRow = new VisualElement();
-        actionRow.style.width = new Length(100f, LengthUnit.Percent);
-        actionRow.style.marginTop = 4f;
-        actionRow.style.flexDirection = FlexDirection.Column;
-        actionRow.style.alignItems = Align.Stretch;
-        actionRow.style.flexShrink = 0f;
-        contentColumn.Add(actionRow);
-
-        var startButton = new Button(StartRun)
-        {
-            text = "START RUN  →"
-        };
-        startButton.style.width = new Length(100f, LengthUnit.Percent);
-        startButton.style.height = 64f;
-        startButton.style.backgroundColor = Orange;
-        startButton.style.color = Color.white;
-        startButton.style.fontSize = 21f;
-        startButton.style.unityFontStyleAndWeight = FontStyle.Bold;
-        startButton.style.unityTextAlign = TextAnchor.MiddleCenter;
-        startButton.style.borderTopWidth = 0f;
-        startButton.style.borderBottomWidth = 0f;
-        startButton.style.borderLeftWidth = 0f;
-        startButton.style.borderRightWidth = 0f;
-        startButton.style.borderTopLeftRadius = 16f;
-        startButton.style.borderTopRightRadius = 16f;
-        startButton.style.borderBottomLeftRadius = 16f;
-        startButton.style.borderBottomRightRadius = 16f;
-        startButton.style.flexShrink = 0f;
-        startButton.RegisterCallback<PointerEnterEvent>(_ => startButton.style.backgroundColor = Cyan);
-        startButton.RegisterCallback<PointerLeaveEvent>(_ => startButton.style.backgroundColor = Orange);
-        actionRow.Add(startButton);
-
-        var hint = new Label("A / D  or  ← / →  //  lane\nW / S  or  ↑ / ↓  //  depth\nSwipe ← / →  lane   //   ↑ / ↓  depth");
-        hint.style.color = Muted;
-        hint.style.fontSize = 12f;
-        hint.style.unityTextAlign = TextAnchor.MiddleCenter;
-        hint.style.whiteSpace = WhiteSpace.Normal;
-        hint.style.marginTop = 12f;
-        hint.style.flexShrink = 0f;
-        hint.style.alignSelf = Align.Center;
-        actionRow.Add(hint);
-
-        var footer = new Label("SURVIVE LONGER  •  CHANGE LANES EARLY  •  NEVER STOP MOVING");
-        footer.style.color = Violet;
-        footer.style.fontSize = 11f;
-        footer.style.unityFontStyleAndWeight = FontStyle.Bold;
-        footer.style.letterSpacing = 0.6f;
-        footer.style.unityTextAlign = TextAnchor.MiddleCenter;
-        footer.style.whiteSpace = WhiteSpace.Normal;
-        footer.style.width = new Length(100f, LengthUnit.Percent);
-        footer.style.marginTop = 16f;
-        footer.style.flexShrink = 0f;
-        frame.Add(footer);
+        coinsLabel = new Label();
+        coinsLabel.style.color = Gold;
+        coinsLabel.style.fontSize = 11f;
+        coinsLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+        coinsLabel.style.marginTop = 2f;
+        stats.Add(coinsLabel);
+        return header;
     }
 
-    private VisualElement CreateSettingRow(string labelText, System.Func<bool> getter, System.Action<bool> setter)
+    private VisualElement BuildTitle()
+    {
+        titleBlock = new VisualElement();
+        var block = titleBlock;
+        block.style.alignItems = Align.Center;
+        block.style.marginTop = 28f;
+        block.style.flexShrink = 0f;
+
+        eyebrowLabel = new Label("•  A RACE AGAINST TIME ACROSS THE GALAXY  •");
+        eyebrowLabel.style.color = Cyan;
+        eyebrowLabel.style.fontSize = 12f;
+        eyebrowLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+        eyebrowLabel.style.letterSpacing = 2f;
+        eyebrowLabel.style.unityTextAlign = TextAnchor.MiddleCenter;
+        eyebrowLabel.style.whiteSpace = WhiteSpace.Normal;
+        block.Add(eyebrowLabel);
+
+        titleLabel = new Label("TIME RUSH");
+        titleLabel.style.color = Color.white;
+        titleLabel.style.fontSize = 68f;
+        titleLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+        titleLabel.style.unityTextAlign = TextAnchor.MiddleCenter;
+        titleLabel.style.letterSpacing = 4f;
+        titleLabel.style.marginTop = 4f;
+        titleLabel.style.unityTextOutlineWidth = 0.6f;
+        titleLabel.style.unityTextOutlineColor = new Color(Violet.r, Violet.g, Violet.b, 0.9f);
+        titleLabel.style.textShadow = new TextShadow { offset = new Vector2(0f, 3f), blurRadius = 14f, color = new Color(Cyan.r, Cyan.g, Cyan.b, 0.85f) };
+        block.Add(titleLabel);
+
+        var edition = new Label("N E B U L A   E D I T I O N");
+        edition.style.color = Gold;
+        edition.style.fontSize = 14f;
+        edition.style.unityFontStyleAndWeight = FontStyle.Bold;
+        edition.style.unityTextAlign = TextAnchor.MiddleCenter;
+        edition.style.marginTop = 2f;
+        edition.style.textShadow = new TextShadow { offset = Vector2.zero, blurRadius = 8f, color = new Color(Orange.r, Orange.g, Orange.b, 0.8f) };
+        block.Add(edition);
+
+        return block;
+    }
+
+    private VisualElement BuildControlDeck()
+    {
+        controlDeck = new VisualElement();
+        var deck = controlDeck;
+        deck.style.flexShrink = 0f;
+        deck.style.backgroundColor = Glass;
+        StyleBorder(deck, 1.5f, new Color(Violet.r, Violet.g, Violet.b, 0.7f));
+        StyleRadius(deck, 22f);
+        deck.style.paddingLeft = 18f;
+        deck.style.paddingRight = 18f;
+        deck.style.paddingTop = 14f;
+        deck.style.paddingBottom = 14f;
+
+        deck.Add(BuildHangar());
+
+        summaryLabel = new Label("DODGE WARSHIPS  •  FIRE LASERS  •  GRAB SHIELDS");
+        summaryLabel.style.color = Muted;
+        summaryLabel.style.fontSize = 10f;
+        summaryLabel.style.letterSpacing = 0.6f;
+        summaryLabel.style.unityTextAlign = TextAnchor.MiddleCenter;
+        summaryLabel.style.marginTop = 10f;
+        deck.Add(summaryLabel);
+
+        launchButton = new Button(() => StartRun(-1, CombatGameMode.Campaign)) { text = "CAMPAIGN" };
+        launchButton.style.height = 70f;
+        launchButton.style.marginTop = 14f;
+        launchButton.style.backgroundColor = Orange;
+        launchButton.style.color = Color.white;
+        launchButton.style.fontSize = 26f;
+        launchButton.style.letterSpacing = 6f;
+        launchButton.style.unityFontStyleAndWeight = FontStyle.Bold;
+        launchButton.style.unityTextAlign = TextAnchor.MiddleCenter;
+        StyleBorder(launchButton, 2f, Gold);
+        StyleRadius(launchButton, 18f);
+        launchButton.style.textShadow = new TextShadow { offset = new Vector2(0f, 2f), blurRadius = 6f, color = new Color(0.4f, 0.05f, 0f, 0.8f) };
+        deck.Add(launchButton);
+
+        var modeHint = new Label("ELIMINATE HOSTILES  •  DEFEAT THE DREADNOUGHT");
+        modeHint.style.color = Muted;
+        modeHint.style.fontSize = 10f;
+        modeHint.style.letterSpacing = 1.5f;
+        modeHint.style.unityTextAlign = TextAnchor.MiddleCenter;
+        modeHint.style.marginTop = 5f;
+        deck.Add(modeHint);
+
+        var combatModes = new VisualElement();
+        combatModes.style.flexDirection = FlexDirection.Row;
+        combatModes.style.marginTop = 8f;
+        deck.Add(combatModes);
+        var survivalButton = CreateNavButton("SURVIVAL", Cyan, () => StartRun(-1, CombatGameMode.Survival));
+        var bossButton = CreateNavButton("BOSS BATTLE", Orange, () => StartRun(-1, CombatGameMode.BossBattle));
+        combatModes.Add(survivalButton);
+        combatModes.Add(bossButton);
+
+        navigationRow = new VisualElement();
+        var nav = navigationRow;
+        nav.style.flexDirection = FlexDirection.Row;
+        nav.style.marginTop = 12f;
+        deck.Add(nav);
+
+        StageProgressModel stages = StageProgress.Load();
+        stagesButton = CreateNavButton($"STAGES  {stages.TotalStars}/{stages.MaxTotalStars}", Mint, ShowStages);
+        nav.Add(stagesButton);
+        dailyMissionsButton = CreateNavButton("DAILY OPS", Gold, ShowDailyMissions);
+        nav.Add(dailyMissionsButton);
+        nav.Add(CreateNavButton("SETTINGS", Cyan, ShowSettings));
+        nav.Add(CreateNavButton("HOW TO PLAY", Cyan, ShowHelp));
+        return deck;
+    }
+
+    private Button CreateNavButton(string text, Color accent, System.Action onClick)
+    {
+        var button = new Button(() =>
+        {
+            GameAudio.Click();
+            onClick();
+        })
+        { text = text };
+        button.style.flexGrow = 1f;
+        button.style.flexBasis = 0f;
+        button.style.height = 44f;
+        button.style.marginLeft = 3f;
+        button.style.marginRight = 3f;
+        button.style.fontSize = 12f;
+        button.style.unityFontStyleAndWeight = FontStyle.Bold;
+        button.style.letterSpacing = 1f;
+        button.style.color = accent;
+        button.style.backgroundColor = new Color(accent.r, accent.g, accent.b, 0.12f);
+        StyleBorder(button, 1f, new Color(accent.r, accent.g, accent.b, 0.6f));
+        StyleRadius(button, 12f);
+        return button;
+    }
+
+    // ---------------------------------------------------------------- hangar (ship colours)
+
+    private VisualElement BuildHangar()
+    {
+        hangarIndex = ShipSkinCatalog.IndexOf(ShipSkinManager.SelectedSkinId);
+
+        var row = new VisualElement();
+        row.style.flexDirection = FlexDirection.Row;
+        row.style.alignItems = Align.Center;
+
+        row.Add(CreateArrowButton("<", -1));
+
+        var center = new VisualElement();
+        center.style.flexGrow = 1f;
+        center.style.alignItems = Align.Center;
+        row.Add(center);
+
+        var caption = new Label("HANGAR");
+        caption.style.color = Muted;
+        caption.style.fontSize = 10f;
+        caption.style.letterSpacing = 3f;
+        center.Add(caption);
+
+        var nameRow = new VisualElement();
+        nameRow.style.flexDirection = FlexDirection.Row;
+        nameRow.style.alignItems = Align.Center;
+        nameRow.style.marginTop = 2f;
+        center.Add(nameRow);
+
+        hangarSwatch = new VisualElement();
+        hangarSwatch.style.width = 16f;
+        hangarSwatch.style.height = 16f;
+        hangarSwatch.style.marginRight = 8f;
+        StyleRadius(hangarSwatch, 8f);
+        StyleBorder(hangarSwatch, 1.5f, Color.white);
+        nameRow.Add(hangarSwatch);
+
+        hangarName = new Label();
+        hangarName.style.color = Color.white;
+        hangarName.style.fontSize = 18f;
+        hangarName.style.unityFontStyleAndWeight = FontStyle.Bold;
+        hangarName.style.letterSpacing = 1.5f;
+        nameRow.Add(hangarName);
+
+        hangarStatus = new Label();
+        hangarStatus.style.fontSize = 11f;
+        hangarStatus.style.marginTop = 2f;
+        center.Add(hangarStatus);
+
+        hangarBuyButton = new Button(BuyPreviewedSkin) { text = "BUY" };
+        hangarBuyButton.style.height = 30f;
+        hangarBuyButton.style.marginTop = 6f;
+        hangarBuyButton.style.paddingLeft = 18f;
+        hangarBuyButton.style.paddingRight = 18f;
+        hangarBuyButton.style.backgroundColor = Gold;
+        hangarBuyButton.style.color = Ink;
+        hangarBuyButton.style.fontSize = 13f;
+        hangarBuyButton.style.unityFontStyleAndWeight = FontStyle.Bold;
+        StyleBorder(hangarBuyButton, 0f, Color.clear);
+        StyleRadius(hangarBuyButton, 10f);
+        center.Add(hangarBuyButton);
+
+        row.Add(CreateArrowButton(">", 1));
+        RefreshHangar();
+        return row;
+    }
+
+    private Button CreateArrowButton(string glyph, int direction)
+    {
+        var button = new Button(() => BrowseHangar(direction)) { text = glyph };
+        button.style.width = 52f;
+        button.style.height = 52f;
+        button.style.fontSize = 24f;
+        button.style.unityFontStyleAndWeight = FontStyle.Bold;
+        button.style.color = Cyan;
+        button.style.backgroundColor = new Color(Cyan.r, Cyan.g, Cyan.b, 0.1f);
+        StyleBorder(button, 1.5f, new Color(Cyan.r, Cyan.g, Cyan.b, 0.6f));
+        StyleRadius(button, 26f);
+        return button;
+    }
+
+    private void BrowseHangar(int direction)
+    {
+        GameAudio.Click();
+        int count = ShipSkinCatalog.Skins.Length;
+        hangarIndex = ((hangarIndex + direction) % count + count) % count;
+        string id = ShipSkinCatalog.Skins[hangarIndex].Id;
+        if (ShipSkinManager.IsUnlocked(id) && ShipSkinManager.SelectedSkinId != id)
+        {
+            ShipSkinManager.Select(id);
+            if (CosmosBackdrop.Active)
+            {
+                CosmosBackdrop.Active.RefreshHeroShip();
+            }
+        }
+
+        RefreshHangar();
+    }
+
+    private void BuyPreviewedSkin()
+    {
+        string id = ShipSkinCatalog.Skins[hangarIndex].Id;
+        if (ShipSkinManager.TryPurchase(id))
+        {
+            GameAudio.Confirm();
+            ShipSkinManager.Select(id);
+            if (CosmosBackdrop.Active)
+            {
+                CosmosBackdrop.Active.RefreshHeroShip();
+            }
+        }
+
+        RefreshHangar();
+    }
+
+    private void RefreshHangar()
+    {
+        ShipSkinCatalog.Skin skin = ShipSkinCatalog.Skins[hangarIndex];
+        bool unlocked = ShipSkinManager.IsUnlocked(skin.Id);
+        int balance = PlayerWallet.Balance;
+        hangarName.text = skin.DisplayName;
+        hangarSwatch.style.backgroundColor = skin.HullColor;
+        coinsLabel.text = $"COINS  {balance}";
+
+        if (unlocked)
+        {
+            hangarStatus.text = "EQUIPPED";
+            hangarStatus.style.color = Cyan;
+            hangarBuyButton.style.display = DisplayStyle.None;
+            return;
+        }
+
+        bool affordable = balance >= skin.Price;
+        hangarStatus.text = affordable ? $"LOCKED  •  {skin.Price} COINS" : $"LOCKED  •  {skin.Price} COINS  (you have {balance})";
+        hangarStatus.style.color = affordable ? Gold : Muted;
+        hangarBuyButton.style.display = affordable ? DisplayStyle.Flex : DisplayStyle.None;
+    }
+
+    // ---------------------------------------------------------------- panels
+
+    /// <summary>Opens a menu panel by name (stages, settings, help, credits, quit). Used by the screenshot validator.</summary>
+    public void OpenPanelForCapture(string panel)
+    {
+        switch (panel)
+        {
+            case "stages": ShowStages(); break;
+            case "daily": ShowDailyMissions(); break;
+            case "settings": ShowSettings(); break;
+            case "help": ShowHelp(); break;
+            case "credits": ShowCredits(); break;
+            case "quit": ShowQuitConfirm(); break;
+        }
+    }
+
+    public void ClosePanels()
+    {
+        if (openPanel != null)
+        {
+            openPanel.RemoveFromHierarchy();
+            openPanel = null;
+        }
+    }
+
+    // A dimmed full-screen layer with a glass card: title, close button and a scrolling body.
+    private VisualElement OpenPanel(string title, Color accent)
+    {
+        ClosePanels();
+
+        var overlay = new VisualElement();
+        overlay.style.position = Position.Absolute;
+        overlay.style.left = 0f;
+        overlay.style.right = 0f;
+        overlay.style.top = 0f;
+        overlay.style.bottom = 0f;
+        overlay.style.backgroundColor = new Color(0.005f, 0.01f, 0.04f, 0.78f);
+        overlay.style.alignItems = Align.Center;
+        overlay.style.justifyContent = Justify.Center;
+        overlay.style.paddingLeft = 16f;
+        overlay.style.paddingRight = 16f;
+        overlay.style.paddingTop = 24f;
+        overlay.style.paddingBottom = 24f;
+        // Tapping the dimmed area outside the card closes it.
+        overlay.RegisterCallback<PointerDownEvent>(evt =>
+        {
+            if (evt.target == overlay)
+            {
+                ClosePanels();
+            }
+        });
+        root.Add(overlay);
+        openPanel = overlay;
+
+        var card = new VisualElement();
+        card.style.width = new Length(100f, LengthUnit.Percent);
+        card.style.maxWidth = 600f;
+        card.style.maxHeight = new Length(100f, LengthUnit.Percent);
+        card.style.backgroundColor = PanelGlass;
+        StyleBorder(card, 1.5f, new Color(accent.r, accent.g, accent.b, 0.75f));
+        StyleRadius(card, 22f);
+        card.style.paddingLeft = 20f;
+        card.style.paddingRight = 20f;
+        card.style.paddingTop = 16f;
+        card.style.paddingBottom = 18f;
+        overlay.Add(card);
+
+        var header = new VisualElement();
+        header.style.flexDirection = FlexDirection.Row;
+        header.style.alignItems = Align.Center;
+        header.style.justifyContent = Justify.SpaceBetween;
+        header.style.flexShrink = 0f;
+        header.style.marginBottom = 10f;
+        card.Add(header);
+
+        var heading = new Label(title);
+        heading.style.color = accent;
+        heading.style.fontSize = 24f;
+        heading.style.unityFontStyleAndWeight = FontStyle.Bold;
+        heading.style.letterSpacing = 3f;
+        header.Add(heading);
+
+        var close = new Button(() =>
+        {
+            GameAudio.Click();
+            ClosePanels();
+        })
+        { text = "X" };
+        close.style.width = 44f;
+        close.style.height = 44f;
+        close.style.fontSize = 18f;
+        close.style.unityFontStyleAndWeight = FontStyle.Bold;
+        close.style.color = Color.white;
+        close.style.backgroundColor = new Color(1f, 1f, 1f, 0.08f);
+        StyleBorder(close, 1f, new Color(1f, 1f, 1f, 0.3f));
+        StyleRadius(close, 22f);
+        header.Add(close);
+
+        var scroll = new ScrollView(ScrollViewMode.Vertical);
+        scroll.style.flexShrink = 1f;
+        scroll.verticalScrollerVisibility = ScrollerVisibility.Auto;
+        scroll.horizontalScrollerVisibility = ScrollerVisibility.Hidden;
+        card.Add(scroll);
+        return scroll;
+    }
+
+    private void ShowStages()
+    {
+        VisualElement body = OpenPanel("STAGES", Mint);
+        StageProgressModel progress = StageProgress.Load();
+
+        var intro = Paragraph($"Survive each stage to clear it and unlock the next. Score more for extra stars.   {progress.TotalStars} / {progress.MaxTotalStars} stars", Muted, 12f);
+        intro.style.marginBottom = 10f;
+        body.Add(intro);
+
+        var grid = new VisualElement();
+        grid.style.flexDirection = FlexDirection.Row;
+        grid.style.flexWrap = Wrap.Wrap;
+        grid.style.justifyContent = Justify.Center;
+        body.Add(grid);
+
+        for (int i = 0; i < StageCatalog.Count; i++)
+        {
+            grid.Add(CreateStageTile(i, progress));
+        }
+    }
+
+    private void ShowDailyMissions()
+    {
+        VisualElement body = OpenPanel("DAILY OPS", Gold);
+        DailyMissions.MissionStatus[] missions = DailyMissions.GetStatuses();
+
+        var intro = Paragraph("Complete today's missions for bonus coins. Progress is saved between runs.", Muted, 12f);
+        intro.style.marginBottom = 8f;
+        body.Add(intro);
+
+        int completedCount = 0;
+        for (int i = 0; i < missions.Length; i++)
+        {
+            DailyMissions.MissionStatus mission = missions[i];
+            completedCount += mission.Completed ? 1 : 0;
+            body.Add(CreateDailyMissionCard(mission));
+        }
+
+        var summary = Paragraph($"{completedCount}/{missions.Length} COMPLETE   •   COINS {PlayerWallet.Balance}", Gold, 12f);
+        summary.style.unityFontStyleAndWeight = FontStyle.Bold;
+        summary.style.marginTop = 8f;
+        summary.style.unityTextAlign = TextAnchor.MiddleCenter;
+        body.Add(summary);
+
+        var launch = CreateNavButton("LAUNCH A RUN", Orange, () =>
+        {
+            ClosePanels();
+            StartRun(-1);
+        });
+        launch.style.height = 48f;
+        launch.style.marginTop = 10f;
+        body.Add(launch);
+    }
+
+    private static VisualElement CreateDailyMissionCard(DailyMissions.MissionStatus mission)
+    {
+        var card = new VisualElement();
+        card.style.marginTop = 5f;
+        card.style.marginBottom = 5f;
+        card.style.paddingLeft = 12f;
+        card.style.paddingRight = 12f;
+        card.style.paddingTop = 9f;
+        card.style.paddingBottom = 9f;
+        card.style.backgroundColor = new Color(Gold.r, Gold.g, Gold.b, 0.07f);
+        StyleBorder(card, 1f, new Color(Gold.r, Gold.g, Gold.b, 0.3f));
+        StyleRadius(card, 12f);
+
+        var heading = new VisualElement();
+        heading.style.flexDirection = FlexDirection.Row;
+        heading.style.justifyContent = Justify.SpaceBetween;
+        heading.style.alignItems = Align.Center;
+        card.Add(heading);
+
+        var title = new Label(mission.Title);
+        title.style.flexGrow = 1f;
+        title.style.color = Color.white;
+        title.style.fontSize = 12f;
+        title.style.whiteSpace = WhiteSpace.Normal;
+        title.style.unityFontStyleAndWeight = FontStyle.Bold;
+        heading.Add(title);
+
+        var reward = new Label(mission.Completed ? "PAID" : $"+{mission.RewardCoins} COINS");
+        reward.style.color = mission.Completed ? Mint : Gold;
+        reward.style.fontSize = 10f;
+        reward.style.unityFontStyleAndWeight = FontStyle.Bold;
+        reward.style.marginLeft = 8f;
+        heading.Add(reward);
+
+        var progressRow = new VisualElement();
+        progressRow.style.flexDirection = FlexDirection.Row;
+        progressRow.style.alignItems = Align.Center;
+        progressRow.style.marginTop = 7f;
+        card.Add(progressRow);
+
+        var track = new VisualElement();
+        track.style.height = 5f;
+        track.style.flexGrow = 1f;
+        track.style.backgroundColor = new Color(1f, 1f, 1f, 0.12f);
+        StyleRadius(track, 3f);
+        progressRow.Add(track);
+
+        var fill = new VisualElement();
+        fill.style.height = new Length(100f, LengthUnit.Percent);
+        fill.style.width = new Length(mission.Target > 0 ? Mathf.Clamp01(mission.Progress / (float)mission.Target) * 100f : 0f, LengthUnit.Percent);
+        fill.style.backgroundColor = mission.Completed ? Mint : Gold;
+        StyleRadius(fill, 3f);
+        track.Add(fill);
+
+        var value = new Label($"{mission.Progress}/{mission.Target}");
+        value.style.color = Muted;
+        value.style.fontSize = 10f;
+        value.style.marginLeft = 8f;
+        progressRow.Add(value);
+        return card;
+    }
+
+    private VisualElement CreateStageTile(int index, StageProgressModel progress)
+    {
+        StageCatalog.StageDefinition stage = StageCatalog.Stages[index];
+        bool unlocked = progress.IsUnlocked(index);
+        int stars = progress.GetStars(index);
+
+        var tile = new Button(() =>
+        {
+            if (unlocked)
+            {
+                GameAudio.Confirm();
+                ClosePanels();
+                StartRun(index);
+            }
+        });
+        tile.style.width = 104f;
+        tile.style.height = 124f;
+        tile.style.marginLeft = 4f;
+        tile.style.marginRight = 4f;
+        tile.style.marginTop = 4f;
+        tile.style.marginBottom = 4f;
+        tile.style.paddingLeft = 4f;
+        tile.style.paddingRight = 4f;
+        tile.style.flexDirection = FlexDirection.Column;
+        tile.style.alignItems = Align.Center;
+        tile.style.justifyContent = Justify.Center;
+        Color edge = !unlocked ? new Color(1f, 1f, 1f, 0.18f) : stars > 0 ? Mint : Gold;
+        tile.style.backgroundColor = unlocked ? new Color(edge.r, edge.g, edge.b, 0.1f) : new Color(1f, 1f, 1f, 0.03f);
+        StyleBorder(tile, 1.5f, new Color(edge.r, edge.g, edge.b, unlocked ? 0.75f : 1f));
+        StyleRadius(tile, 16f);
+        tile.SetEnabled(unlocked);
+
+        var number = new Label(unlocked ? stage.Number.ToString() : "LOCKED");
+        number.style.color = unlocked ? Color.white : Muted;
+        number.style.fontSize = unlocked ? 30f : 13f;
+        number.style.unityFontStyleAndWeight = FontStyle.Bold;
+        number.pickingMode = PickingMode.Ignore;
+        tile.Add(number);
+
+        var name = new Label(stage.Name);
+        name.style.color = unlocked ? Muted : new Color(Muted.r, Muted.g, Muted.b, 0.6f);
+        name.style.fontSize = 9f;
+        name.style.unityTextAlign = TextAnchor.MiddleCenter;
+        name.style.whiteSpace = WhiteSpace.Normal;
+        name.style.marginTop = 2f;
+        name.pickingMode = PickingMode.Ignore;
+        tile.Add(name);
+
+        var starRow = new VisualElement();
+        starRow.style.flexDirection = FlexDirection.Row;
+        starRow.style.marginTop = 6f;
+        starRow.pickingMode = PickingMode.Ignore;
+        for (int s = 0; s < StageCatalog.MaxStars; s++)
+        {
+            starRow.Add(new StarIcon(s < stars, 16f));
+        }
+
+        tile.Add(starRow);
+        starRow.style.flexShrink = 0f;
+        starRow.style.height = 18f;
+
+        var goal = new Label($"{stage.GoalSeconds:0}s");
+        goal.style.color = new Color(Muted.r, Muted.g, Muted.b, 0.8f);
+        goal.style.fontSize = 9f;
+        goal.style.marginTop = 3f;
+        goal.pickingMode = PickingMode.Ignore;
+        tile.Add(goal);
+
+        // A fixed-height tile must not squash its rows into each other.
+        foreach (VisualElement child in tile.Children())
+        {
+            child.style.flexShrink = 0f;
+        }
+
+        return tile;
+    }
+
+    private void ShowSettings()
+    {
+        VisualElement body = OpenPanel("SETTINGS", Cyan);
+
+        body.Add(SectionLabel("AUDIO"));
+        body.Add(CreateToggleRow("Sound", () => FeedbackPreferences.IsAudioEnabled(feedbackConfig), FeedbackPreferences.SetAudioEnabled));
+        body.Add(CreateLevelRow("Music", () => FeedbackPreferences.MusicVolume, v => FeedbackPreferences.MusicVolume = v));
+        body.Add(CreateLevelRow("Effects", () => FeedbackPreferences.SfxVolume, v => FeedbackPreferences.SfxVolume = v));
+
+        body.Add(SectionLabel("COMFORT"));
+        body.Add(CreateToggleRow("Camera shake", () => FeedbackPreferences.IsCameraShakeEnabled(feedbackConfig), FeedbackPreferences.SetCameraShakeEnabled));
+        body.Add(CreateToggleRow("Calm effects (less flashing)", () => FeedbackPreferences.IsReduceFlashingEnabled(feedbackConfig), FeedbackPreferences.SetReduceFlashingEnabled));
+        body.Add(CreateToggleRow("Vibration", () => FeedbackPreferences.IsVibrationEnabled, FeedbackPreferences.SetVibrationEnabled));
+
+        var links = new VisualElement();
+        links.style.flexDirection = FlexDirection.Row;
+        links.style.marginTop = 16f;
+        body.Add(links);
+        links.Add(CreateNavButton("SHOW TUTORIAL AGAIN", Gold, () =>
+        {
+            FeedbackPreferences.SetTutorialSeen(false);
+            ShowHelp();
+        }));
+        links.Add(CreateNavButton("CREDITS", Violet, ShowCredits));
+    }
+
+    private void ShowHelp()
+    {
+        VisualElement body = OpenPanel("HOW TO PLAY", Cyan);
+        body.Add(HelpRow("MOVE", "Swipe left / right to change lane.\nKeys: A / D or arrow keys."));
+        body.Add(HelpRow("DEPTH", "Swipe up / down to fly further back or closer.\nKeys: W / S."));
+        body.Add(HelpRow("FIRE", "Tap the screen to shoot your laser.\nKey: Space."));
+        body.Add(HelpRow("DANGER", "A red ring under a warship means it is on your line and will hit you. Move or shoot it."));
+        body.Add(HelpRow("SHIELD", "Fly through a blue shield to become untouchable for a few seconds."));
+        body.Add(HelpRow("FLOW", "Near misses build a score multiplier. Keep the chain going."));
+        body.Add(HelpRow("PAUSE", "Tap the pause button, or press Esc / P."));
+    }
+
+    private void ShowCredits()
+    {
+        VisualElement body = OpenPanel("CREDITS", Violet);
+        body.Add(HelpRow("GAME", "Time Rush: Nebula Edition\nDesign & development: luay89"));
+        body.Add(HelpRow("MUSIC", "Composed and synthesised in code at runtime (no audio files)."));
+        body.Add(HelpRow("SOUND FX", "Kenney (kenney.nl), CC0 1.0. Interface sounds synthesised in code."));
+        body.Add(HelpRow("ENGINE", "Made with Unity. Text: TextMesh Pro."));
+        var version = Paragraph($"Version {Application.version}", Muted, 11f);
+        version.style.marginTop = 10f;
+        version.style.unityTextAlign = TextAnchor.MiddleCenter;
+        body.Add(version);
+    }
+
+    private void ShowQuitConfirm()
+    {
+        VisualElement body = OpenPanel("LEAVE?", Orange);
+        body.Add(Paragraph("Close Time Rush? Your progress is saved.", Color.white, 15f));
+
+        var row = new VisualElement();
+        row.style.flexDirection = FlexDirection.Row;
+        row.style.marginTop = 16f;
+        body.Add(row);
+        row.Add(CreateNavButton("STAY", Cyan, ClosePanels));
+        row.Add(CreateNavButton("QUIT GAME", Orange, () =>
+        {
+            ClosePanels();
+            Application.Quit();
+        }));
+    }
+
+    private static Label SectionLabel(string text)
+    {
+        var label = new Label(text);
+        label.style.color = Gold;
+        label.style.fontSize = 11f;
+        label.style.letterSpacing = 3f;
+        label.style.unityFontStyleAndWeight = FontStyle.Bold;
+        label.style.marginTop = 10f;
+        label.style.marginBottom = 4f;
+        return label;
+    }
+
+    private static Label Paragraph(string text, Color color, float size)
+    {
+        var label = new Label(text);
+        label.style.color = color;
+        label.style.fontSize = size;
+        label.style.whiteSpace = WhiteSpace.Normal;
+        return label;
+    }
+
+    private static VisualElement HelpRow(string title, string text)
     {
         var row = new VisualElement();
-        row.style.width = new Length(100f, LengthUnit.Percent);
         row.style.flexDirection = FlexDirection.Row;
-        row.style.justifyContent = Justify.SpaceBetween;
-        row.style.alignItems = Align.Center;
-        row.style.minHeight = 42f;
-        row.style.marginTop = 4f;
+        row.style.alignItems = Align.FlexStart;
+        row.style.marginTop = 6f;
+        row.style.marginBottom = 6f;
 
-        var label = new Label(labelText);
-        label.style.color = Color.white;
-        label.style.fontSize = 14f;
-        label.style.flexGrow = 1f;
-        label.style.flexShrink = 1f;
-        label.style.whiteSpace = WhiteSpace.Normal;
-        label.style.marginRight = 16f;
-        row.Add(label);
+        var key = new Label(title);
+        key.style.width = 92f;
+        key.style.flexShrink = 0f;
+        key.style.color = Cyan;
+        key.style.fontSize = 13f;
+        key.style.unityFontStyleAndWeight = FontStyle.Bold;
+        key.style.letterSpacing = 1.5f;
+        row.Add(key);
 
+        var body = Paragraph(text, Color.white, 13f);
+        body.style.flexShrink = 1f;
+        body.style.flexGrow = 1f;
+        row.Add(body);
+        return row;
+    }
+
+    private VisualElement CreateToggleRow(string labelText, System.Func<bool> getter, System.Action<bool> setter)
+    {
+        var row = SettingRow(labelText);
         var button = new Button();
-        button.style.width = 96f;
+        button.style.width = 84f;
         button.style.height = 38f;
-        button.style.flexShrink = 0f;
-        button.style.unityFontStyleAndWeight = FontStyle.Bold;
         button.style.fontSize = 13f;
-        button.style.unityTextAlign = TextAnchor.MiddleCenter;
-        button.style.borderTopWidth = 0f;
-        button.style.borderBottomWidth = 0f;
-        button.style.borderLeftWidth = 0f;
-        button.style.borderRightWidth = 0f;
-        button.style.borderTopLeftRadius = 10f;
-        button.style.borderTopRightRadius = 10f;
-        button.style.borderBottomLeftRadius = 10f;
-        button.style.borderBottomRightRadius = 10f;
+        button.style.unityFontStyleAndWeight = FontStyle.Bold;
+        StyleRadius(button, 12f);
 
-        void Refresh()
+        System.Action refresh = () =>
         {
             bool value = getter();
             button.text = value ? "ON" : "OFF";
-            button.style.backgroundColor = value ? Cyan : Muted;
-            button.style.color = value ? Ink : Ink;
-        }
+            button.style.backgroundColor = value ? new Color(Cyan.r, Cyan.g, Cyan.b, 0.22f) : new Color(1f, 1f, 1f, 0.05f);
+            button.style.color = value ? Cyan : Muted;
+            StyleBorder(button, 1f, value ? new Color(Cyan.r, Cyan.g, Cyan.b, 0.7f) : new Color(Muted.r, Muted.g, Muted.b, 0.35f));
+        };
 
         button.clicked += () =>
         {
             setter(!getter());
-            Refresh();
+            refresh();
+            GameAudio.Click();
         };
 
-        Refresh();
+        refresh();
         row.Add(button);
         return row;
     }
 
-    private void StartRun()
+    // A 10-step level control: [-] segmented bar [+]. Big touch targets, no tiny slider thumb.
+    private VisualElement CreateLevelRow(string labelText, System.Func<float> getter, System.Action<float> setter)
+    {
+        const int Steps = 10;
+        var row = SettingRow(labelText);
+
+        var control = new VisualElement();
+        control.style.flexDirection = FlexDirection.Row;
+        control.style.alignItems = Align.Center;
+        row.Add(control);
+
+        var segments = new VisualElement[Steps];
+        System.Action refresh = null;
+        System.Action<int> apply = level =>
+        {
+            setter(Mathf.Clamp(level, 0, Steps) / (float)Steps);
+            refresh();
+            GameAudio.Click();
+        };
+
+        control.Add(SmallButton("-", () => apply(Mathf.RoundToInt(getter() * Steps) - 1)));
+
+        var bar = new VisualElement();
+        bar.style.flexDirection = FlexDirection.Row;
+        bar.style.marginLeft = 6f;
+        bar.style.marginRight = 6f;
+        control.Add(bar);
+        for (int i = 0; i < Steps; i++)
+        {
+            int level = i + 1;
+            var segment = new VisualElement();
+            segment.style.width = 13f;
+            segment.style.height = 26f;
+            segment.style.marginLeft = 1.5f;
+            segment.style.marginRight = 1.5f;
+            StyleRadius(segment, 3f);
+            segment.RegisterCallback<PointerDownEvent>(_ => apply(level));
+            segments[i] = segment;
+            bar.Add(segment);
+        }
+
+        control.Add(SmallButton("+", () => apply(Mathf.RoundToInt(getter() * Steps) + 1)));
+
+        refresh = () =>
+        {
+            int level = Mathf.RoundToInt(getter() * Steps);
+            for (int i = 0; i < Steps; i++)
+            {
+                segments[i].style.backgroundColor = i < level ? Cyan : new Color(1f, 1f, 1f, 0.1f);
+            }
+        };
+
+        refresh();
+        return row;
+    }
+
+    private static Button SmallButton(string text, System.Action onClick)
+    {
+        var button = new Button(onClick) { text = text };
+        button.style.width = 38f;
+        button.style.height = 38f;
+        button.style.fontSize = 18f;
+        button.style.unityFontStyleAndWeight = FontStyle.Bold;
+        button.style.color = Cyan;
+        button.style.backgroundColor = new Color(Cyan.r, Cyan.g, Cyan.b, 0.1f);
+        StyleBorder(button, 1f, new Color(Cyan.r, Cyan.g, Cyan.b, 0.5f));
+        StyleRadius(button, 19f);
+        return button;
+    }
+
+    private static VisualElement SettingRow(string labelText)
+    {
+        var row = new VisualElement();
+        row.style.flexDirection = FlexDirection.Row;
+        row.style.alignItems = Align.Center;
+        row.style.justifyContent = Justify.SpaceBetween;
+        row.style.minHeight = 48f;
+        row.style.borderBottomWidth = 1f;
+        row.style.borderBottomColor = new Color(1f, 1f, 1f, 0.06f);
+
+        var label = new Label(labelText);
+        label.style.color = Color.white;
+        label.style.fontSize = 14f;
+        label.style.flexShrink = 1f;
+        label.style.whiteSpace = WhiteSpace.Normal;
+        label.style.marginRight = 8f;
+        row.Add(label);
+        return row;
+    }
+
+    // ---------------------------------------------------------------- animation
+
+    // Title colour breathing between cyan and violet glow, eyebrow shimmer, and a heartbeat pulse
+    // on the launch button. UI Toolkit scheduler, so no Update loop and nothing touches gameplay.
+    private void StartAnimations()
+    {
+        float startTime = Time.unscaledTime;
+        titleLabel.schedule.Execute(() =>
+        {
+            float t = Time.unscaledTime - startTime;
+            float wave = Mathf.Sin(t * 1.6f) * 0.5f + 0.5f;
+            Color glow = Color.Lerp(Cyan, new Color(0.95f, 0.35f, 1f, 1f), wave);
+            titleLabel.style.textShadow = new TextShadow { offset = new Vector2(0f, 3f), blurRadius = 10f + wave * 10f, color = new Color(glow.r, glow.g, glow.b, 0.9f) };
+            titleLabel.style.unityTextOutlineColor = Color.Lerp(Violet, Cyan, wave);
+            eyebrowLabel.style.opacity = 0.65f + 0.35f * Mathf.Sin(t * 2.3f + 1f);
+
+            float beat = Mathf.Pow(Mathf.Max(0f, Mathf.Sin(t * 3.1f)), 8f);
+            float pulse = 1f + beat * 0.035f;
+            launchButton.style.scale = new Scale(new Vector3(pulse, pulse, 1f));
+            launchButton.style.backgroundColor = Color.Lerp(Orange, new Color(1f, 0.55f, 0.15f, 1f), beat);
+        }).Every(16);
+    }
+
+    private static void StyleBorder(VisualElement element, float width, Color color)
+    {
+        element.style.borderLeftWidth = width;
+        element.style.borderRightWidth = width;
+        element.style.borderTopWidth = width;
+        element.style.borderBottomWidth = width;
+        element.style.borderLeftColor = color;
+        element.style.borderRightColor = color;
+        element.style.borderTopColor = color;
+        element.style.borderBottomColor = color;
+    }
+
+    private static void StyleRadius(VisualElement element, float radius)
+    {
+        element.style.borderTopLeftRadius = radius;
+        element.style.borderTopRightRadius = radius;
+        element.style.borderBottomLeftRadius = radius;
+        element.style.borderBottomRightRadius = radius;
+    }
+
+    private static void StylePadding(VisualElement element, float horizontal, float vertical)
+    {
+        element.style.paddingLeft = horizontal;
+        element.style.paddingRight = horizontal;
+        element.style.paddingTop = vertical;
+        element.style.paddingBottom = vertical;
+    }
+
+    // ---------------------------------------------------------------- launching
+
+    /// <param name="stageIndex">-1 for the endless run, otherwise the stage to play.</param>
+    private void StartRun(int stageIndex)
+    {
+        StartRun(stageIndex, stageIndex >= 0 ? CombatGameMode.Stage : CombatGameMode.Survival);
+    }
+
+    private void StartRun(int stageIndex, CombatGameMode mode)
     {
         if (startRequestInProgress)
         {
             return;
         }
 
-        if (GameStateMachine.HasInstance)
+        switch (mode)
         {
-            startRequestInProgress = true;
-            if (!GameStateMachine.Instance.StartRunFromMenu())
-            {
-                startRequestInProgress = false;
-            }
+            case CombatGameMode.Campaign:
+                CombatGameModeSession.BeginCampaign();
+                break;
+            case CombatGameMode.BossBattle:
+                CombatGameModeSession.BeginBossBattle();
+                break;
+            case CombatGameMode.Stage:
+                CombatGameModeSession.BeginStage(stageIndex);
+                break;
+            default:
+                CombatGameModeSession.BeginSurvival();
+                break;
+        }
+
+        GameAudio.Confirm();
+        startRequestInProgress = true;
+        if (launchButton != null)
+        {
+            launchButton.text = "ENGAGE";
+            launchButton.SetEnabled(false);
+        }
+
+        // The ship blasts off into warp first; the run loads once it has left the frame.
+        if (CosmosBackdrop.Active)
+        {
+            CosmosBackdrop.Active.PlayLaunch();
+            StartCoroutine(LoadRunAfter(0.75f));
             return;
         }
 
-        startRequestInProgress = true;
+        LoadRun();
+    }
+
+    private System.Collections.IEnumerator LoadRunAfter(float seconds)
+    {
+        yield return new WaitForSecondsRealtime(seconds);
+        LoadRun();
+    }
+
+    private void LoadRun()
+    {
+        if (GameStateMachine.HasInstance)
+        {
+            if (!GameStateMachine.Instance.StartRunFromMenu())
+            {
+                startRequestInProgress = false;
+                if (launchButton != null)
+                {
+                    launchButton.text = "CAMPAIGN";
+                    launchButton.SetEnabled(true);
+                }
+            }
+
+            return;
+        }
+
         SceneManager.LoadScene(gameSceneName);
+    }
+
+    /// <summary>A five-pointed star drawn with the vector API (no font glyph needed).</summary>
+    private sealed class StarIcon : VisualElement
+    {
+        private readonly bool filled;
+
+        public StarIcon(bool filled, float size)
+        {
+            this.filled = filled;
+            style.width = size;
+            style.height = size;
+            style.marginLeft = 1f;
+            style.marginRight = 1f;
+            pickingMode = PickingMode.Ignore;
+            generateVisualContent += Draw;
+        }
+
+        private void Draw(MeshGenerationContext context)
+        {
+            Rect rect = contentRect;
+            var painter = context.painter2D;
+            Vector2 center = rect.center;
+            float outer = Mathf.Min(rect.width, rect.height) * 0.5f;
+            float inner = outer * 0.45f;
+
+            painter.BeginPath();
+            for (int i = 0; i < 10; i++)
+            {
+                float angle = Mathf.Deg2Rad * (-90f + i * 36f);
+                float radius = i % 2 == 0 ? outer : inner;
+                var point = center + new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * radius;
+                if (i == 0)
+                {
+                    painter.MoveTo(point);
+                }
+                else
+                {
+                    painter.LineTo(point);
+                }
+            }
+
+            painter.ClosePath();
+            if (filled)
+            {
+                painter.fillColor = Gold;
+                painter.Fill();
+            }
+            else
+            {
+                painter.strokeColor = new Color(1f, 1f, 1f, 0.35f);
+                painter.lineWidth = 1.2f;
+                painter.Stroke();
+            }
+        }
     }
 }

@@ -23,6 +23,9 @@ public static class SoftParticleMaterial
         return material;
     }
 
+    /// <summary>Shared radial glow texture (cached; callers must never destroy it).</summary>
+    public static Texture2D SharedTexture => ResolveTexture();
+
     private static Texture2D ResolveTexture()
     {
         if (cachedTexture)

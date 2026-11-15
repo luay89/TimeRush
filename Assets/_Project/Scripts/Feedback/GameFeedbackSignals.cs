@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 /// <summary>
 /// Persistent access point for the typed feedback hub. It owns no gameplay rule or presentation effect.
@@ -8,6 +9,24 @@ public sealed class GameFeedbackSignals : MonoBehaviour
     public static GameFeedbackSignals Instance { get; private set; }
     public static bool HasInstance => Instance != null;
     public FeedbackEventHub Events { get; } = new FeedbackEventHub();
+
+    private const string BootSceneName = "Boot";
+
+    // Boot.unity is the only scene that owns the hub. Pressing Play directly in Game.unity (the
+    // usual way to iterate in the Editor) therefore had no hub at all: no lane/near-miss/collision
+    // event was ever raised, so every feedback sound stayed silent. Before the first scene wakes,
+    // create a bare hub unless that scene is Boot (which brings its own), so the Game scene's own
+    // presenters can subscribe in OnEnable as usual.
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+    private static void EnsureHubWhenNotStartingFromBoot()
+    {
+        if (HasInstance || SceneManager.GetActiveScene().name == BootSceneName)
+        {
+            return;
+        }
+
+        new GameObject("GameFeedbackSignals").AddComponent<GameFeedbackSignals>();
+    }
 
     private void Awake()
     {

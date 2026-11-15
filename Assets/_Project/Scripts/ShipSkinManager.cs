@@ -69,16 +69,23 @@ public static class ShipSkinManager
     public static string CycleToNext()
     {
         int currentIndex = ShipSkinCatalog.IndexOf(SelectedSkinId);
-        int nextIndex = (currentIndex + 1) % ShipSkinCatalog.Skins.Length;
-        string nextId = ShipSkinCatalog.Skins[nextIndex].Id;
+        int count = ShipSkinCatalog.Skins.Length;
 
-        if (IsUnlocked(nextId))
+        // Walk forward until a skin is owned or affordable, so an expensive locked skin no longer
+        // makes the button look dead (previously it stopped at the first locked skin).
+        for (int step = 1; step < count; step++)
         {
-            Select(nextId);
-        }
-        else
-        {
-            TryPurchase(nextId);
+            string nextId = ShipSkinCatalog.Skins[(currentIndex + step) % count].Id;
+            if (IsUnlocked(nextId))
+            {
+                Select(nextId);
+                break;
+            }
+
+            if (TryPurchase(nextId))
+            {
+                break;
+            }
         }
 
         return SelectedSkinId;

@@ -12,6 +12,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a198e8af5a1541c6bfd0909b3404b0d5, type: 3}
   m_Name: GameBalanceConfig
   m_EditorClassIdentifier:
+  enableSpaceCombat: 1
+  combatPlayAreaRadius: 14
+  combatPlayerMoveSpeed: 11
+  combatPlayerAcceleration: 14
+  combatForwardSpeed: 6
   trainingDuration: 25
   maxDifficultySeconds: 120
   trainingMaxProgress: 0.18

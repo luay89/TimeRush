@@ -26,6 +26,8 @@ public sealed class PauseOverlayPresenter : MonoBehaviour
 
     private GameObject pauseButton;
     private GameObject overlayRoot;
+    private TextMeshProUGUI quitLabel;
+    private float quitConfirmUntil;
     private bool uiBuilt;
     private GameStateKind lastAppliedState = (GameStateKind)(-1);
 
@@ -41,6 +43,11 @@ public sealed class PauseOverlayPresenter : MonoBehaviour
         if (state != lastAppliedState)
         {
             ApplyState(state, force: false);
+            ResetQuitConfirm();
+        }
+        else if (quitConfirmUntil > 0f && Time.unscaledTime > quitConfirmUntil)
+        {
+            ResetQuitConfirm();
         }
     }
 
@@ -204,6 +211,12 @@ public sealed class PauseOverlayPresenter : MonoBehaviour
         var resume = CreateActionButton(panelGO.transform, "ResumeButton", "RESUME", OnResumePressed);
         AddLayoutHeight(resume, 96f);
 
+        // Leaving mid-run throws the run away, so the first tap only asks for confirmation.
+        var quit = CreateActionButton(panelGO.transform, "QuitButton", "MAIN MENU", OnQuitPressed);
+        quit.GetComponent<Image>().color = new Color(0.2f, 0.24f, 0.36f, 1f);
+        quitLabel = quit.GetComponentInChildren<TextMeshProUGUI>();
+        AddLayoutHeight(quit, 80f);
+
         overlayRoot = root.gameObject;
     }
 
@@ -256,6 +269,7 @@ public sealed class PauseOverlayPresenter : MonoBehaviour
         var button = buttonGO.GetComponent<Button>();
         button.onClick.AddListener(() =>
         {
+            GameAudio.Click();
             setter(!getter());
             Refresh();
         });
@@ -283,6 +297,7 @@ public sealed class PauseOverlayPresenter : MonoBehaviour
 
         var button = go.GetComponent<Button>();
         button.onClick.AddListener(onClick);
+        button.onClick.AddListener(GameAudio.Click);
         return go;
     }
 
@@ -352,6 +367,37 @@ public sealed class PauseOverlayPresenter : MonoBehaviour
         if (GameStateMachine.HasInstance)
         {
             GameStateMachine.Instance.TogglePause();
+        }
+    }
+
+    private void OnQuitPressed()
+    {
+        if (!GameStateMachine.HasInstance)
+        {
+            return;
+        }
+
+        if (Time.unscaledTime > quitConfirmUntil)
+        {
+            quitConfirmUntil = Time.unscaledTime + 3f;
+            if (quitLabel)
+            {
+                quitLabel.text = "TAP AGAIN TO QUIT RUN";
+            }
+
+            return;
+        }
+
+        quitConfirmUntil = 0f;
+        GameStateMachine.Instance.ReturnToMenu();
+    }
+
+    private void ResetQuitConfirm()
+    {
+        quitConfirmUntil = 0f;
+        if (quitLabel)
+        {
+            quitLabel.text = "MAIN MENU";
         }
     }
 

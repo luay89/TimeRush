@@ -87,6 +87,7 @@ public class ScoreUIBinder : MonoBehaviour
 
     private void Update()
     {
+        UpdateOrientation();
         if (GameStateMachine.HasInstance && GameStateMachine.Instance.CurrentState != GameStateKind.Playing)
         {
             return;
@@ -118,6 +119,9 @@ public class ScoreUIBinder : MonoBehaviour
         RefreshDepthGauge();
     }
 
+    // Right-aligned labels start left of PauseOverlayPresenter's 120px corner button.
+    private const float PauseButtonClearance = 196f;
+
     private void EnsureRuntimeHud()
     {
         if (!scoreLabel)
@@ -130,9 +134,6 @@ public class ScoreUIBinder : MonoBehaviour
             bestLabel = FindLabel("BestLabel");
         }
 
-        ConfigureExistingLabel(scoreLabel, TextAlignmentOptions.Left, 72f, Cyan, new Vector2(56f, -52f), new Vector2(420f, 120f), new Vector2(0f, 1f));
-        ConfigureExistingLabel(bestLabel, TextAlignmentOptions.Right, 36f, White, new Vector2(-56f, -60f), new Vector2(360f, 70f), new Vector2(1f, 1f));
-
         survivalTimeLabel = survivalTimeLabel ? survivalTimeLabel : CreateLabel("SurvivalTimeLabel");
         statusLabel = statusLabel ? statusLabel : CreateLabel("StatusLabel");
         paceLabel = paceLabel ? paceLabel : CreateLabel("PaceLabel");
@@ -140,18 +141,80 @@ public class ScoreUIBinder : MonoBehaviour
         zoneAnnounceLabel = zoneAnnounceLabel ? zoneAnnounceLabel : CreateLabel("ZoneAnnounceLabel");
         depthGaugeLabel = depthGaugeLabel ? depthGaugeLabel : CreateLabel("DepthGaugeLabel");
 
-        ConfigureExistingLabel(survivalTimeLabel, TextAlignmentOptions.Center, 48f, White, new Vector2(0f, -46f), new Vector2(430f, 86f), new Vector2(0.5f, 1f));
-        ConfigureExistingLabel(statusLabel, TextAlignmentOptions.Center, 22f, Cyan, new Vector2(0f, -126f), new Vector2(640f, 48f), new Vector2(0.5f, 1f));
-        ConfigureExistingLabel(paceLabel, TextAlignmentOptions.Right, 24f, Violet, new Vector2(-56f, -112f), new Vector2(360f, 48f), new Vector2(1f, 1f));
-        ConfigureExistingLabel(flowLabel, TextAlignmentOptions.Left, 24f, Violet, new Vector2(56f, -150f), new Vector2(420f, 50f), new Vector2(0f, 1f));
+        if (FindObjectOfType<CombatMissionController>())
+        {
+            foreach (TextMeshProUGUI label in new[] { scoreLabel, bestLabel, survivalTimeLabel, statusLabel, paceLabel, flowLabel, zoneAnnounceLabel, depthGaugeLabel })
+            {
+                if (label)
+                {
+                    label.gameObject.SetActive(false);
+                }
+            }
+        }
+
+        ApplyLayout(IsPortrait());
+        zoneAnnounceLabel?.SetText(string.Empty);
+    }
+
+    private bool layoutPortrait;
+
+    // Judged from the HUD canvas itself (not Screen), so it also holds for off-screen renders.
+    private bool IsPortrait()
+    {
+        var canvas = GetComponentInParent<Canvas>();
+        if (!canvas)
+        {
+            return Screen.height > Screen.width;
+        }
+
+        Rect rect = ((RectTransform)canvas.rootCanvas.transform).rect;
+        return rect.height > rect.width;
+    }
+
+    private void UpdateOrientation()
+    {
+        bool portrait = IsPortrait();
+        if (portrait != layoutPortrait)
+        {
+            ApplyLayout(portrait);
+        }
+    }
+
+    /// <summary>
+    /// Landscape keeps everything on one top row. A portrait phone is too narrow for Score, the
+    /// timer and Best side by side, so the timer drops to a second row and the call-outs below it.
+    /// </summary>
+    private void ApplyLayout(bool portrait)
+    {
+        layoutPortrait = portrait;
+        bool stage = StageSession.IsStageRun;
+        float timerY = portrait ? -150f : -46f;
+        float rowShift = portrait ? 80f : 0f;
+
+        ConfigureExistingLabel(scoreLabel, TextAlignmentOptions.Left, 72f, Cyan, new Vector2(56f, -52f), new Vector2(420f, 120f), new Vector2(0f, 1f));
+        ConfigureExistingLabel(bestLabel, TextAlignmentOptions.Right, 36f, White, new Vector2(-PauseButtonClearance, -60f), new Vector2(360f, 70f), new Vector2(1f, 1f));
+        ConfigureExistingLabel(survivalTimeLabel, TextAlignmentOptions.Center, stage ? 42f : 48f, White, new Vector2(0f, timerY), new Vector2(stage ? 620f : 430f, 86f), new Vector2(0.5f, 1f));
+        ConfigureExistingLabel(statusLabel, TextAlignmentOptions.Center, 22f, Cyan, new Vector2(0f, -126f - rowShift), new Vector2(640f, 48f), new Vector2(0.5f, 1f));
+        ConfigureExistingLabel(paceLabel, TextAlignmentOptions.Right, 24f, Violet, new Vector2(-PauseButtonClearance, -112f), new Vector2(360f, 48f), new Vector2(1f, 1f));
+        ConfigureExistingLabel(flowLabel, TextAlignmentOptions.Left, 24f, Violet, new Vector2(56f, -150f - rowShift), new Vector2(420f, 50f), new Vector2(0f, 1f));
         // Placed above the survival timer, at top-center, so a zone message reads like an incoming
         // transmission rather than competing with the near-miss/challenge popups on statusLabel.
-        ConfigureExistingLabel(zoneAnnounceLabel, TextAlignmentOptions.Center, 26f, Amber, new Vector2(0f, -180f), new Vector2(760f, 52f), new Vector2(0.5f, 1f));
-        zoneAnnounceLabel?.SetText(string.Empty);
+        ConfigureExistingLabel(zoneAnnounceLabel, TextAlignmentOptions.Center, 26f, Amber, new Vector2(0f, -180f - rowShift), new Vector2(760f, 52f), new Vector2(0.5f, 1f));
 
         // Bottom-center, out of the way of every other HUD element -- a quiet readout rather than
         // another competing headline number.
         ConfigureExistingLabel(depthGaugeLabel, TextAlignmentOptions.Center, 20f, Muted, new Vector2(0f, 66f), new Vector2(760f, 44f), new Vector2(0.5f, 0f));
+
+        // Narrow screens: let long call-outs shrink instead of running off the edges.
+        foreach (TextMeshProUGUI label in new[] { statusLabel, zoneAnnounceLabel, depthGaugeLabel, survivalTimeLabel })
+        {
+            if (label)
+            {
+                label.enableAutoSizing = true;
+                label.fontSizeMax = label.fontSize;
+                label.fontSizeMin = label.fontSize * 0.55f;
+            }
+        }
     }
 
     private TextMeshProUGUI FindLabel(string objectName)
@@ -205,7 +268,17 @@ public class ScoreUIBinder : MonoBehaviour
         if (force || Mathf.Abs(survivalTime - lastDisplayedTime) >= 0.05f)
         {
             lastDisplayedTime = survivalTime;
-            survivalTimeLabel?.SetText(string.Format("TIME  {0:00}:{1:00}", Mathf.FloorToInt(survivalTime / 60f), Mathf.FloorToInt(survivalTime % 60f)));
+            if (StageSession.IsStageRun)
+            {
+                // Stage mode counts toward the finish line instead of up from zero.
+                float goal = StageSession.Current.GoalSeconds;
+                int left = Mathf.CeilToInt(Mathf.Max(0f, goal - survivalTime));
+                survivalTimeLabel?.SetText(string.Format("STAGE {0}  //  {1:00}:{2:00}", StageSession.Current.Number, left / 60, left % 60));
+            }
+            else
+            {
+                survivalTimeLabel?.SetText(string.Format("TIME  {0:00}:{1:00}", Mathf.FloorToInt(survivalTime / 60f), Mathf.FloorToInt(survivalTime % 60f)));
+            }
         }
 
         float pace = gc.GetPaceMultiplier();
@@ -239,13 +312,13 @@ public class ScoreUIBinder : MonoBehaviour
             if (gc.IsGameOver)
             {
                 statusLabel.color = White;
-                statusLabel.SetText("RUN ENDED");
+                statusLabel.SetText(gc.IsStageCleared ? "STAGE CLEAR" : "RUN ENDED");
             }
             else
             {
                 float opacity = gc.GetControlHintOpacity();
                 statusLabel.color = new Color(Cyan.r, Cyan.g, Cyan.b, opacity);
-                statusLabel.SetText(opacity > 0.02f ? "A/D or Swipe: Lane  //  W/S or Swipe: Depth" : string.Empty);
+                statusLabel.SetText(opacity > 0.02f ? "A/D or Swipe: Lane  //  W/S or Swipe: Depth  //  Space or Tap: Fire" : string.Empty);
             }
         }
     }

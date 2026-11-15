@@ -7,8 +7,10 @@ using UnityEngine.SceneManagement;
 /// </summary>
 public sealed class GameStateMachine : MonoBehaviour
 {
+#pragma warning disable CS0414 // read only in device builds (see Awake)
     [SerializeField, Tooltip("Stable frame-rate cap applied once at boot (device builds only) so frame pacing/power draw stay predictable regardless of the device's native display refresh rate. Does not affect gameplay timing, which is already Time.deltaTime based.")]
     private int targetFrameRate = 60;
+#pragma warning restore CS0414
 
     public static GameStateMachine Instance { get; private set; }
     public static bool HasInstance => Instance != null;
@@ -126,9 +128,17 @@ public sealed class GameStateMachine : MonoBehaviour
 
     public bool ReturnToMenu()
     {
-        if (sceneLoadInProgress || !EnsureStateModel().TryTransition(GameStateKind.MenuHub))
+        if (sceneLoadInProgress)
         {
             return false;
+        }
+
+        if (!EnsureStateModel().TryTransition(GameStateKind.MenuHub))
+        {
+            // The state can lag the scene (e.g. Play pressed directly in a non-Boot scene leaves
+            // it at Boot), and Boot -> MenuHub is not a legal step, so the Menu button silently
+            // did nothing. Go through Loading instead, which every such state allows.
+            return TryBeginSceneLoad(GameStateKind.MenuHub, SceneNames.MenuHub);
         }
 
         Time.timeScale = 1f;
@@ -157,6 +167,13 @@ public sealed class GameStateMachine : MonoBehaviour
 
     public bool Pause()
     {
+        // The run is already over (the ship is exploding on its way to Results): pausing now
+        // would block the Playing -> Results step.
+        if (GameController.Instance && GameController.Instance.IsGameOver)
+        {
+            return false;
+        }
+
         if (!EnsureStateModel().TryTransition(GameStateKind.Paused))
         {
             return false;
