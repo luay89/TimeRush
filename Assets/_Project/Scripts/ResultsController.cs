@@ -1699,23 +1699,34 @@ public class ResultsController : MonoBehaviour
             return rewardedAdService;
         }
 
-        if (rewardedAdService is MonoBehaviour cachedBehaviour && cachedBehaviour)
+        // A real provider always wins over the development mock (which Boot always carries), so a
+        // cached mock is re-checked in case the real provider was created after it was found.
+        if (rewardedAdService is MonoBehaviour cachedBehaviour && cachedBehaviour && !(rewardedAdService is MockRewardedAdService))
         {
             return rewardedAdService;
         }
 
+        IRewardedAdService mockFallback = null;
         MonoBehaviour[] behaviours = FindObjectsOfType<MonoBehaviour>(true);
         for (int i = 0; i < behaviours.Length; i++)
         {
-            if (behaviours[i] is IRewardedAdService service)
+            if (!(behaviours[i] is IRewardedAdService service))
             {
-                rewardedAdService = service;
-                return rewardedAdService;
+                continue;
             }
+
+            if (service is MockRewardedAdService)
+            {
+                mockFallback ??= service;
+                continue;
+            }
+
+            rewardedAdService = service;
+            return rewardedAdService;
         }
 
-        rewardedAdService = null;
-        return null;
+        rewardedAdService = mockFallback;
+        return rewardedAdService;
     }
 
     private void HandleRewardGranted(int attemptId)
