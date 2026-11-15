@@ -279,6 +279,30 @@ public sealed class SpaceCombatPlayModeTests
     }
 
     [UnityTest]
+    public IEnumerator BackgroundingTheApp_PausesTheRun_UntilThePlayerResumes()
+    {
+        yield return StartRun(stageIndex: -1, enableCombat: true);
+
+        var gsm = GameStateMachine.Instance;
+        Assert.AreEqual(GameStateKind.Playing, gsm.CurrentState, "Precondition: run in progress.");
+
+        // Unity sends OnApplicationPause(true) to every MonoBehaviour when Android backgrounds the app.
+        gsm.gameObject.SendMessage("OnApplicationPause", true);
+        Assert.AreEqual(GameStateKind.Paused, gsm.CurrentState, "Backgrounding the app must pause the run.");
+        Assert.AreEqual(0f, Time.timeScale, "A backgrounded run must not keep simulating.");
+
+        yield return null;
+
+        // Coming back to the app must not resume on its own: the player resumes from the pause menu.
+        gsm.gameObject.SendMessage("OnApplicationPause", false);
+        Assert.AreEqual(GameStateKind.Paused, gsm.CurrentState, "Returning to the app must leave the run paused.");
+
+        Assert.IsTrue(gsm.Resume(), "The paused run must be resumable.");
+        Assert.AreEqual(GameStateKind.Playing, gsm.CurrentState);
+        Assert.AreEqual(1f, Time.timeScale);
+    }
+
+    [UnityTest]
     public IEnumerator LegacyRunnerSystems_AreNotRegressed_WhenCombatDisabled()
     {
         yield return StartRun(stageIndex: -1, enableCombat: false);
