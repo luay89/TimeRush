@@ -7,12 +7,45 @@ using UnityEngine.TestTools;
 public sealed class SpaceCombatPlayModeTests
 {
     private const float SceneTimeoutSeconds = 30f;
+    private const string BootSceneName = "Boot";
+    private const string DontDestroyOnLoadSceneName = "DontDestroyOnLoad";
+    private const string FallbackFeedbackHubName = "GameFeedbackSignals";
+    private const float WaveTestPlayerHealth = 1000000f;
+
+    // Device-input component disabled by the current test (re-enabled in TearDown).
+    private static CombatPlayerInputSource isolatedInputSource;
+
+    // Wave director paused by the current test (re-enabled in TearDown).
+    private static CombatWaveDirector isolatedWaveDirector;
+
+    // Name prefix CombatWaveDirector.SpawnEnemy gives every wave enemy.
+    private const string WaveEnemyNamePrefix = "Enemy_";
+
+#if UNITY_EDITOR
+    private const string BalanceConfigPath = "Assets/_Project/Config/GameBalanceConfig.asset";
+#endif
+
+    // The shared GameBalanceConfig asset whose combat flag a test overrode, and its value before
+    // the override. Restored in TearDown, which NUnit runs even when an assertion fails or a
+    // WaitUntil times out, so no test can leak its flag into the next test or into the asset.
+    private static GameBalanceConfig overriddenConfig;
+    private static bool originalCombatFlag;
 
     [TearDown]
     public void TearDown()
     {
         Time.timeScale = 1f;
         RunCountdown.TutorialOverride = null;
+        RestoreCombatFlag();
+        RestoreDeviceInput();
+        RestoreWaveDirector();
+    }
+
+    [OneTimeTearDown]
+    public void OneTimeTearDown()
+    {
+        // Safety net in case a TearDown was skipped by the runner.
+        RestoreCombatFlag();
     }
 
     [UnityTest]
@@ -31,6 +64,7 @@ public sealed class SpaceCombatPlayModeTests
 
         var player = Object.FindObjectOfType<CombatPlayerController>();
         Assert.NotNull(player);
+        IsolatePlayerFromDeviceInput(player);
 
         Vector3 start = player.transform.position;
 
@@ -52,6 +86,8 @@ public sealed class SpaceCombatPlayModeTests
 
         var player = Object.FindObjectOfType<CombatPlayerController>();
         Assert.NotNull(player);
+        IsolatePlayerFromDeviceInput(player);
+        yield return IsolateFromWaveEnemies();
 
         var weapons = player.GetComponent<CombatWeaponController>();
         Assert.NotNull(weapons);
@@ -163,6 +199,15 @@ public sealed class SpaceCombatPlayModeTests
         var wave = Object.FindObjectOfType<CombatWaveDirector>();
         Assert.NotNull(wave);
 
+        // This test checks wave progression and boss victory, not player survival: a player that
+        // never moves or fires is otherwise killed by the first wave before the stage goal.
+        // Enemy AI, projectiles and damage all stay active; only this run's player health is raised.
+        var playerShip = Object.FindObjectOfType<CombatPlayerController>();
+        Assert.NotNull(playerShip, "Combat player ship missing.");
+        var playerHealth = playerShip.GetComponent<CombatShipHealth>();
+        Assert.NotNull(playerHealth, "Combat player health missing.");
+        playerHealth.SetMaxVitals(WaveTestPlayerHealth, playerHealth.MaxShield, refill: true);
+
         // Ensure initial wave spawns.
         yield return new WaitForSeconds(2.2f);
         int enemiesAfterFirst = wave.ActiveEnemyCount;
@@ -249,26 +294,19 @@ public sealed class SpaceCombatPlayModeTests
     {
         RunCountdown.TutorialOverride = false;
 
-        string activeScene = SceneManager.GetActiveScene().name;
-        if (activeScene != "Boot" && activeScene != SceneNames.MenuHub)
-        {
-            if (GameStateMachine.HasInstance)
-            {
-                Object.Destroy(GameStateMachine.Instance.gameObject);
-                yield return null;
-            }
+        // Every test boots from the same clean state, regardless of which scene the previous test
+        // ended in (including a Boot scene that never got past startup).
+        yield return ResetToCleanBootState();
 
-            yield return SceneManager.LoadSceneAsync("Boot", LoadSceneMode.Single);
-        }
-
+        yield return SceneManager.LoadSceneAsync(BootSceneName, LoadSceneMode.Single);
+        yield return WaitUntil(() => GameStateMachine.HasInstance, SceneTimeoutSeconds, "Boot's GameStateMachine to initialise");
         yield return WaitUntil(() => SceneManager.GetActiveScene().name == SceneNames.MenuHub, SceneTimeoutSeconds, "menu scene");
         yield return WaitUntil(() => GameStateMachine.HasInstance, SceneTimeoutSeconds, "game state machine");
 
-        var gc = GameController.Instance;
-        Assert.NotNull(gc);
-
-        bool originalCombatFlag = gc.BalanceConfig.enableSpaceCombat;
-        gc.BalanceConfig.enableSpaceCombat = enableCombat;
+        // GameController only exists in the Game scene, and the combat runtime reads the flag in the
+        // same frame that scene loads (CombatModeInstaller on sceneLoaded, CombatMissionController.Awake).
+        // So the flag must be set on the shared config asset before the Game scene is requested.
+        OverrideCombatFlag(enableCombat);
 
         if (stageIndex >= 0)
         {
@@ -284,10 +322,184 @@ public sealed class SpaceCombatPlayModeTests
 
         yield return WaitUntil(() => SceneManager.GetActiveScene().name == SceneNames.Game, SceneTimeoutSeconds, "game scene");
         yield return WaitUntil(() => GameController.Instance != null, SceneTimeoutSeconds, "game controller");
+
+        var gc = GameController.Instance;
+        Assert.NotNull(gc);
+        Assert.AreSame(overriddenConfig, gc.BalanceConfig, "Game scene uses a different GameBalanceConfig than the one the test configured.");
+        Assert.AreEqual(enableCombat, gc.BalanceConfig.enableSpaceCombat, "Combat flag was not applied before the Game scene loaded.");
+
         yield return WaitUntil(() => !RunCountdown.IsCounting, SceneTimeoutSeconds, "run countdown");
 
-        // Restore default so tests remain isolated.
-        gc.BalanceConfig.enableSpaceCombat = originalCombatFlag;
+        // The flag stays as requested for the whole test body; TearDown restores it.
+    }
+
+    /// <summary>
+    /// Removes the two persistent leftovers that stop Boot from starting a second time:
+    ///  1. The previous test's Boot bootstrap object (DontDestroyOnLoad, owns GameStateMachine and
+    ///     its own GameFeedbackSignals). If it survives, the new Boot's GameStateMachine duplicate
+    ///     check destroys the new bootstrap object.
+    ///  2. The bare fallback hub that GameFeedbackSignals.EnsureHubWhenNotStartingFromBoot creates
+    ///     because the test runner starts in InitTestScene instead of Boot. If it survives, Boot's
+    ///     GameFeedbackSignals duplicate check destroys Boot's whole bootstrap object (BootLoader and
+    ///     GameStateMachine included) before BootLoader.Start can request MenuHub.
+    /// Anything that does not match these exact shapes is left alone and fails the setup instead.
+    /// </summary>
+    private static IEnumerator ResetToCleanBootState()
+    {
+        GameObject previousBootstrap = null;
+        if (GameStateMachine.HasInstance)
+        {
+            previousBootstrap = GameStateMachine.Instance.gameObject;
+            Assert.AreEqual(DontDestroyOnLoadSceneName, previousBootstrap.scene.name,
+                $"Setup expected the previous GameStateMachine on a persistent Boot bootstrap object, found it on '{previousBootstrap.name}' in scene '{previousBootstrap.scene.name}'.");
+            Object.Destroy(previousBootstrap);
+        }
+
+        if (GameFeedbackSignals.HasInstance)
+        {
+            GameObject hubHost = GameFeedbackSignals.Instance.gameObject;
+            if (hubHost != previousBootstrap)
+            {
+                Assert.IsTrue(IsBareFallbackFeedbackHub(hubHost),
+                    $"Setup found an unexpected GameFeedbackSignals host '{hubHost.name}' ({DescribeComponents(hubHost)}) and refuses to destroy it.");
+                Object.Destroy(hubHost);
+            }
+        }
+
+        // Destroy() completes at the end of the frame; both singletons clear themselves in OnDestroy.
+        yield return WaitUntil(() => !GameStateMachine.HasInstance && !GameFeedbackSignals.HasInstance,
+            SceneTimeoutSeconds, "previous Boot bootstrap and fallback feedback hub to be destroyed");
+    }
+
+    private static bool IsBareFallbackFeedbackHub(GameObject host)
+    {
+        if (host.name != FallbackFeedbackHubName || host.scene.name != DontDestroyOnLoadSceneName
+            || host.transform.parent != null || host.transform.childCount != 0)
+        {
+            return false;
+        }
+
+        // Exactly what EnsureHubWhenNotStartingFromBoot creates: a Transform and the hub, nothing else.
+        var components = host.GetComponents<Component>();
+        return components.Length == 2 && components[0] is Transform && components[1] is GameFeedbackSignals;
+    }
+
+    private static string DescribeComponents(GameObject host)
+    {
+        var components = host.GetComponents<Component>();
+        var names = new string[components.Length];
+        for (int i = 0; i < components.Length; i++)
+        {
+            names[i] = components[i] ? components[i].GetType().Name : "MissingScript";
+        }
+
+        return string.Join(", ", names);
+    }
+
+    /// <summary>
+    /// CombatPlayerInputSource pushes the real keyboard/touch state into the controller and weapons
+    /// every frame (SetRequestedMove / SetFireHeld), which in batch mode is always "no input" and
+    /// overwrites what the test drives. Disabling only that component lets the test drive the real
+    /// CombatPlayerController and CombatWeaponController through their public input methods.
+    /// </summary>
+    private static void IsolatePlayerFromDeviceInput(CombatPlayerController player)
+    {
+        var input = player.GetComponent<CombatPlayerInputSource>();
+        Assert.NotNull(input, "Combat player has no CombatPlayerInputSource to isolate.");
+        input.enabled = false;
+        isolatedInputSource = input;
+
+        Assert.IsTrue(player.enabled, "CombatPlayerController must stay enabled.");
+        var weapons = player.GetComponent<CombatWeaponController>();
+        Assert.IsTrue(weapons == null || weapons.enabled, "CombatWeaponController must stay enabled.");
+    }
+
+    /// <summary>
+    /// Every player weapon aims at CombatEnemy.FindNearest, so wave enemies spawned by the stage run
+    /// can take the shots meant for a test's own target. Pauses only the wave director and removes
+    /// only the enemies it spawned (identified by its naming and an AI brain); the test target is
+    /// created afterwards and every weapon, projectile and damage system stays active.
+    /// </summary>
+    private static IEnumerator IsolateFromWaveEnemies()
+    {
+        var director = Object.FindObjectOfType<CombatWaveDirector>();
+        Assert.NotNull(director, "Combat run has no CombatWaveDirector to pause.");
+        director.enabled = false;
+        isolatedWaveDirector = director;
+
+        foreach (var enemy in Object.FindObjectsOfType<CombatEnemy>())
+        {
+            if (enemy.name.StartsWith(WaveEnemyNamePrefix) && enemy.GetComponent<CombatEnemyBrain>())
+            {
+                Object.Destroy(enemy.gameObject);
+            }
+        }
+
+        // Destroy() completes at the end of the frame.
+        yield return WaitUntil(() => Object.FindObjectsOfType<CombatEnemy>().Length == 0,
+            SceneTimeoutSeconds, "wave enemies to be removed before creating the test target");
+    }
+
+    private static void RestoreWaveDirector()
+    {
+        // The director lives in the Game scene, so it may already be destroyed.
+        if (isolatedWaveDirector)
+        {
+            isolatedWaveDirector.enabled = true;
+        }
+
+        isolatedWaveDirector = null;
+    }
+
+    private static void RestoreDeviceInput()
+    {
+        // The component lives on the Game scene's player, so it may already be destroyed.
+        if (isolatedInputSource)
+        {
+            isolatedInputSource.enabled = true;
+        }
+
+        isolatedInputSource = null;
+    }
+
+    private static void OverrideCombatFlag(bool enableCombat)
+    {
+        var config = LoadBalanceConfig();
+        Assert.NotNull(config, "Could not load GameBalanceConfig before starting the run.");
+
+        // Remember the original value only once per test, so a second StartRun in the same test
+        // cannot record the overridden value as the "original".
+        if (overriddenConfig == null)
+        {
+            overriddenConfig = config;
+            originalCombatFlag = config.enableSpaceCombat;
+        }
+
+        config.enableSpaceCombat = enableCombat;
+    }
+
+    private static void RestoreCombatFlag()
+    {
+        if (overriddenConfig != null)
+        {
+            // Restoring the exact original value means the in-memory asset matches the file on disk
+            // again, so even a later editor save cannot write a changed flag.
+            overriddenConfig.enableSpaceCombat = originalCombatFlag;
+        }
+
+        overriddenConfig = null;
+    }
+
+    private static GameBalanceConfig LoadBalanceConfig()
+    {
+#if UNITY_EDITOR
+        // In the editor this returns the same in-memory asset instance that Game.unity references.
+        return UnityEditor.AssetDatabase.LoadAssetAtPath<GameBalanceConfig>(BalanceConfigPath);
+#else
+        // In a player build the config is only loaded with the Game scene, which is too late.
+        Assert.Fail("SpaceCombatPlayModeTests must run in the Unity Editor (they configure GameBalanceConfig before the Game scene loads).");
+        return null;
+#endif
     }
 
     private static IEnumerator WaitUntil(System.Func<bool> predicate, float timeoutSeconds, string condition)

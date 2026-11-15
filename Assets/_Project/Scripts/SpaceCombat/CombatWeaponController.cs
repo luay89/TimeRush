@@ -15,7 +15,8 @@ public sealed class CombatWeaponController : MonoBehaviour
 
     private readonly List<CombatWeapon> weapons = new List<CombatWeapon>(8);
     private CombatPlayerController player;
-    private int index;
+    // -1 = nothing selected yet, so Awake's SelectIndex(0) really selects (and binds) the first weapon.
+    private int index = -1;
     private bool fireHeld;
 
     public int ActiveIndex => index;
