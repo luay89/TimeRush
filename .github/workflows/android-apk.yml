@@ -1,19 +1,35 @@
-# Builds the installable Android APK of Time Rush Nebula on GitHub and publishes it as a
-# pre-release, so it can be downloaded straight onto a phone.
-# Needs three repository secrets (Settings > Secrets and variables > Actions):
-#   UNITY_EMAIL, UNITY_PASSWORD  - the Unity account
-#   UNITY_LICENSE                - contents of the Unity_lic.ulf file from a computer where
-#                                  Unity Hub is signed in (Personal licence is fine)
-# Without them the job only prints this reminder and stops green.
+# Builds the Android APK of Time Rush Nebula on GitHub Actions.
+#
+# Required repository secrets (Settings > Secrets and variables > Actions). Their values are
+# never printed; the job fails with the names of any that are missing.
+#   UNITY_LICENSE   - contents of the Unity_lic.ulf licence file from a machine where Unity Hub
+#                     is signed in (a Personal licence works)
+#   UNITY_EMAIL     - the Unity account e-mail
+#   UNITY_PASSWORD  - the Unity account password
+#
+# Every push to main or feat/time-rush-v2: EditMode tests, then a release (non-development) APK
+# uploaded as a workflow artifact. A GitHub pre-release is only published from a manual run
+# (Actions > Build Android APK > Run workflow) with "publish_prerelease" ticked.
+# No signing secrets are used: the APK is signed with the CI runner's Android debug key, so it
+# installs for testing but is not a store-signed release.
 name: Build Android APK
 
 on:
   workflow_dispatch:
+    inputs:
+      publish_prerelease:
+        description: Publish the built APK as a GitHub pre-release
+        type: boolean
+        default: false
   push:
-    branches: [feat/time-rush-v2]
+    branches: [main, feat/time-rush-v2]
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   android:
@@ -23,50 +39,100 @@ jobs:
       UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
       UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
       UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+      APP_VERSION: 1.0.${{ github.run_number }}
+      APP_VERSION_CODE: ${{ github.run_number }}
     steps:
-      - name: Unity secrets missing
-        if: ${{ env.UNITY_LICENSE == '' }}
-        run: echo "::notice::Add UNITY_LICENSE, UNITY_EMAIL and UNITY_PASSWORD secrets to build the APK."
+      - name: Check required Unity secrets
+        run: |
+          missing=""
+          [ -n "$UNITY_LICENSE" ] || missing="$missing UNITY_LICENSE"
+          [ -n "$UNITY_EMAIL" ] || missing="$missing UNITY_EMAIL"
+          [ -n "$UNITY_PASSWORD" ] || missing="$missing UNITY_PASSWORD"
+          if [ -n "$missing" ]; then
+            echo "::error title=Unity secrets missing::Add these repository secrets under Settings > Secrets and variables > Actions:$missing"
+            exit 1
+          fi
+          echo "All required Unity secrets are present."
 
       - name: Free disk space
-        if: ${{ env.UNITY_LICENSE != '' }}
         uses: jlumbroso/free-disk-space@v1.3.1
         with:
           android: false
 
       - uses: actions/checkout@v4
-        if: ${{ env.UNITY_LICENSE != '' }}
-        with:
-          lfs: true
 
       - uses: actions/cache@v4
-        if: ${{ env.UNITY_LICENSE != '' }}
         with:
           path: Library
-          key: Library-Android-${{ hashFiles('Packages/**', 'ProjectSettings/**') }}
+          key: Library-Android-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
           restore-keys: Library-Android-
 
+      - name: EditMode tests
+        uses: game-ci/unity-test-runner@v4
+        with:
+          testMode: editmode
+          artifactsPath: test-results
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: editmode-test-results
+          path: test-results
+          if-no-files-found: ignore
+
       - name: Build APK
-        if: ${{ env.UNITY_LICENSE != '' }}
         uses: game-ci/unity-builder@v4
         with:
           targetPlatform: Android
           buildName: TimeRushNebula
           buildMethod: TimeRushBuild.BuildAndroidCI
           androidExportType: androidPackage
+          versioning: Custom
+          version: ${{ env.APP_VERSION }}
+          androidVersionCode: ${{ env.APP_VERSION_CODE }}
+
+      - name: Verify APK
+        run: |
+          apk=$(ls build/Android/*.apk 2>/dev/null | head -1)
+          if [ -z "$apk" ]; then
+            echo "::error title=No APK::The Unity build finished without producing build/Android/*.apk"
+            exit 1
+          fi
+          ls -l "$apk"
+          sha256sum "$apk" | tee build/Android/SHA256SUMS.txt
 
       - uses: actions/upload-artifact@v4
-        if: ${{ env.UNITY_LICENSE != '' }}
         with:
           name: TimeRushNebula-apk
-          path: build/Android
+          path: |
+            build/Android/*.apk
+            build/Android/SHA256SUMS.txt
+          if-no-files-found: error
+
+  publish:
+    needs: android
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_prerelease }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: TimeRushNebula-apk
+          path: apk
 
       - name: Publish pre-release with the APK
-        if: ${{ env.UNITY_LICENSE != '' }}
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: nebula-build-${{ github.run_number }}
-          name: Time Rush Nebula (build ${{ github.run_number }})
+          tag_name: nebula-ci-${{ github.run_number }}
+          name: Time Rush Nebula 1.0.${{ github.run_number }} (CI pre-release)
           target_commitish: ${{ github.sha }}
           prerelease: true
-          files: build/Android/*.apk
+          body: |
+            Automated CI build of ${{ github.sha }} (run ${{ github.run_id }}).
+            EditMode tests passed in this run. Signed with the CI runner's Android debug key:
+            installable for testing, not a store-signed release.
+          files: |
+            apk/*.apk
+            apk/SHA256SUMS.txt

@@ -42,6 +42,8 @@ public static class TimeRushBuild
             output = Path.Combine(output, "TimeRushNebula.apk");
         }
 
+        ApplyCiVersion();
+
         if (Build(output) == null)
         {
             EditorApplication.Exit(1);
@@ -89,6 +91,28 @@ public static class TimeRushBuild
         {
             PlayerSettings.SetIconsForTargetGroup(BuildTargetGroup.Unknown, new[] { icon });
         }
+    }
+
+    /// <summary>
+    /// game-ci passes -buildVersion and -androidVersionCode to the build method; apply them so every
+    /// CI APK carries its own version and can be installed over an older one. Local builds that pass
+    /// neither keep the project's own Player Settings.
+    /// </summary>
+    private static void ApplyCiVersion()
+    {
+        string version = GetArgument("-buildVersion");
+        if (!string.IsNullOrEmpty(version) && !version.Equals("none", StringComparison.OrdinalIgnoreCase))
+        {
+            PlayerSettings.bundleVersion = version;
+        }
+
+        string versionCode = GetArgument("-androidVersionCode");
+        if (int.TryParse(versionCode, out int code) && code > 0)
+        {
+            PlayerSettings.Android.bundleVersionCode = code;
+        }
+
+        Debug.Log($"TimeRushBuild: version {PlayerSettings.bundleVersion} (code {PlayerSettings.Android.bundleVersionCode}).");
     }
 
     private static string GetArgument(string name)
