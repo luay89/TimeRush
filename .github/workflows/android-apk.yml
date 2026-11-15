@@ -7,11 +7,18 @@
 #   UNITY_EMAIL     - the Unity account e-mail
 #   UNITY_PASSWORD  - the Unity account password
 #
+# Optional upload-key signing (all four or none; see docs/release/ANDROID_SIGNING.md):
+#   ANDROID_KEYSTORE_BASE64 - the upload keystore file, base64-encoded
+#   ANDROID_KEYSTORE_PASS   - keystore password
+#   ANDROID_KEYALIAS_NAME   - key alias inside the keystore
+#   ANDROID_KEYALIAS_PASS   - key password
+# With them, the APK is signed with the upload key and a Play Store bundle (.aab) is built too.
+# Without them, the APK is signed with the CI runner's Android debug key: installable for testing,
+# not a store-signed release, and no .aab is produced.
+#
 # Every push to main or feat/time-rush-v2: EditMode tests, then a release (non-development) APK
 # uploaded as a workflow artifact. A GitHub pre-release is only published from a manual run
 # (Actions > Build Android APK > Run workflow) with "publish_prerelease" ticked.
-# No signing secrets are used: the APK is signed with the CI runner's Android debug key, so it
-# installs for testing but is not a store-signed release.
 name: Build Android APK
 
 on:
@@ -41,6 +48,10 @@ jobs:
       UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
       APP_VERSION: 1.0.${{ github.run_number }}
       APP_VERSION_CODE: ${{ github.run_number }}
+      HAS_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+      HAS_KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS != '' }}
+      HAS_KEYALIAS_NAME: ${{ secrets.ANDROID_KEYALIAS_NAME != '' }}
+      HAS_KEYALIAS_PASS: ${{ secrets.ANDROID_KEYALIAS_PASS != '' }}
     steps:
       - name: Check required Unity secrets
         run: |
@@ -53,6 +64,22 @@ jobs:
             exit 1
           fi
           echo "All required Unity secrets are present."
+
+      - name: Check optional signing secrets
+        id: signing
+        run: |
+          set -- "$HAS_KEYSTORE" "$HAS_KEYSTORE_PASS" "$HAS_KEYALIAS_NAME" "$HAS_KEYALIAS_PASS"
+          count=0; for v in "$@"; do [ "$v" = "true" ] && count=$((count+1)); done
+          if [ "$count" -eq 4 ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "Upload-key signing enabled: signed APK and Play Store AAB will be built."
+          elif [ "$count" -eq 0 ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Debug-signed build::No upload keystore secrets; the APK will be debug-signed and no AAB is built."
+          else
+            echo "::error title=Incomplete signing secrets::Set all four of ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASS, ANDROID_KEYALIAS_NAME, ANDROID_KEYALIAS_PASS, or none."
+            exit 1
+          fi
 
       - name: Free disk space
         uses: jlumbroso/free-disk-space@v1.3.1
@@ -91,6 +118,28 @@ jobs:
           versioning: Custom
           version: ${{ env.APP_VERSION }}
           androidVersionCode: ${{ env.APP_VERSION_CODE }}
+          androidKeystoreName: ${{ steps.signing.outputs.enabled == 'true' && 'user.keystore' || '' }}
+          androidKeystoreBase64: ${{ steps.signing.outputs.enabled == 'true' && secrets.ANDROID_KEYSTORE_BASE64 || '' }}
+          androidKeystorePass: ${{ steps.signing.outputs.enabled == 'true' && secrets.ANDROID_KEYSTORE_PASS || '' }}
+          androidKeyaliasName: ${{ steps.signing.outputs.enabled == 'true' && secrets.ANDROID_KEYALIAS_NAME || '' }}
+          androidKeyaliasPass: ${{ steps.signing.outputs.enabled == 'true' && secrets.ANDROID_KEYALIAS_PASS || '' }}
+
+      - name: Build Play Store bundle (AAB)
+        if: ${{ steps.signing.outputs.enabled == 'true' }}
+        uses: game-ci/unity-builder@v4
+        with:
+          targetPlatform: Android
+          buildName: TimeRushNebula
+          buildMethod: TimeRushBuild.BuildAndroidCI
+          androidExportType: androidAppBundle
+          versioning: Custom
+          version: ${{ env.APP_VERSION }}
+          androidVersionCode: ${{ env.APP_VERSION_CODE }}
+          androidKeystoreName: user.keystore
+          androidKeystoreBase64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          androidKeystorePass: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+          androidKeyaliasName: ${{ secrets.ANDROID_KEYALIAS_NAME }}
+          androidKeyaliasPass: ${{ secrets.ANDROID_KEYALIAS_PASS }}
 
       - name: Verify APK
         run: |
@@ -108,6 +157,14 @@ jobs:
           path: |
             build/Android/*.apk
             build/Android/SHA256SUMS.txt
+          if-no-files-found: error
+
+      - name: Upload Play Store bundle
+        if: ${{ steps.signing.outputs.enabled == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: TimeRushNebula-aab
+          path: build/Android/*.aab
           if-no-files-found: error
 
   publish:
