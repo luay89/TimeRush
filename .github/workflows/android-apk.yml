@@ -99,6 +99,9 @@ jobs:
         with:
           testMode: editmode
           artifactsPath: test-results
+          # Pinned: "latest" makes the action query the GitHub API unauthenticated, which fails
+          # with 403 once the shared runner IP hits its rate limit (run 44069933568).
+          cliVersion: v0.1.76
 
       - name: Upload test results
         if: always()
